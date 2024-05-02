@@ -33,12 +33,12 @@ spec:
 """
     ) {
         node(POD_LABEL) {
-          #git url: pipelineParams.repo, branch: pipelineParams.branch, credentialsId: 'git_read'
+          git url: pipelineParams.repo, branch: pipelineParams.branch, credentialsId: 'git_read'
            
-           # // Adding the "Export Kubeconfig Secret" stage
-           # stage('Export Kubeconfig Secret') {
-           #     container(name: 'egov-deployer', shell: '/bin/sh') {
-            #        sh """
+            // Adding the "Export Kubeconfig Secret" stage
+            stage('Export Kubeconfig Secret') {
+                container(name: 'egov-deployer', shell: '/bin/sh') {
+                    sh """
                         # Create the .kube directory
                        # mkdir -p /root/.kube
                         
@@ -46,13 +46,13 @@ spec:
                        # kubectl get secret ${pipelineParams.environment}-kube-config -n egov -o jsonpath='{.data.config}' | base64 -d > /root/.kube/config
                         
                         # Optionally, set KUBECONFIG environment variable to use this kubeconfig
-              #          export KUBECONFIG=/root/.kube/config
-             #           kubectl config get-contexts
-               #         kubectl config current-context
-                #        aws-iam-authenticator version
-                 #       kubectl get nodes
-                  #  """
-                #}
+                        export KUBECONFIG=/root/.kube/config
+                        kubectl config get-contexts
+                        kubectl config current-context
+                        aws-iam-authenticator version
+                        kubectl get nodes
+                    """
+                }
           
             git url: pipelineParams.repo, branch: pipelineParams.branch, credentialsId: 'git_read'
                 stage('Deploy Images') {
