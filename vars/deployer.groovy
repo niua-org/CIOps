@@ -40,13 +40,13 @@ spec:
                 container(name: 'egov-deployer', shell: '/bin/sh') {
                     sh """
                         # Create the .kube directory
-                        mkdir -p /root/.kube
+                        mkdir -p kube
                         
                         # Extract the kubeconfig from the secret and write it to a file
-                        kubectl get secret ${pipelineParams.environment}-kube-config -n jenkins -o jsonpath='{.data.config}' | base64 -d > /root/.kube/config
+                        kubectl get secret ${pipelineParams.environment}-kube-config -n jenkins -o jsonpath='{.data.config}' | base64 -d > kube/config
                         
                         # Optionally, set KUBECONFIG environment variable to use this kubeconfig
-                        export KUBECONFIG=/root/.kube/config
+                        export KUBECONFIG=kube/config
                         kubectl config get-contexts
                         kubectl config current-context
                         aws-iam-authenticator version
