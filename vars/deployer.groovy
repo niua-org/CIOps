@@ -43,7 +43,7 @@ spec:
                         mkdir -p /root/.kube
                         
                         # Extract the kubeconfig from the secret and write it to a file
-                        kubectl get secret ${pipelineParams.environment}-kube-config -n egov -o jsonpath='{.data.config}' | base64 -d > /root/.kube/config
+                        kubectl get secret ${pipelineParams.environment}-kube-config -n jenkins -o jsonpath='{.data.config}' | base64 -d > /root/.kube/config
                         
                         # Optionally, set KUBECONFIG environment variable to use this kubeconfig
                         export KUBECONFIG=/root/.kube/config
