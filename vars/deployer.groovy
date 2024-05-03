@@ -51,7 +51,7 @@ spec:
                         kubectl config current-context
                         aws-iam-authenticator version
                         kubectl get nodes
-                        pwd && ls -la
+                        pwd && ls -la config-as-code/helm/charts
                     """
                 }
           
