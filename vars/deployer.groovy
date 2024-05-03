@@ -46,7 +46,7 @@ spec:
                        # kubectl get secret ${pipelineParams.environment}-kube-config -n egov -o jsonpath='{.data.config}' | base64 -d > /root/.kube/config
                         
                         # Optionally, set KUBECONFIG environment variable to use this kubeconfig
-                        export KUBECONFIG=/root/.kube/configniua1
+                        export KUBECONFIG=/root/.kube/config
                         kubectl config get-contexts
                         kubectl config current-context
                         aws-iam-authenticator version
