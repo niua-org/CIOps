@@ -43,8 +43,8 @@ spec:
         memory: "3954Mi"
         cpu: "1500m"      
   - name: git
-    image: eclipse-temurin:17-jdk
-    imagePullPolicy: Always
+    image: docker.io/egovio/builder:2-64da60a1-version_script_update-NA
+    imagePullPolicy: IfNotPresent
     command:
     - cat
     tty: true        
