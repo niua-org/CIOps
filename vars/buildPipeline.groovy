@@ -80,21 +80,21 @@ spec:
                     withEnv(["BUILD_PATH=${jobConfig.getBuildConfigs().get(0).getWorkDir()}",
                              "PATH=alpine:$PATH"
                     ]) {
-                           container(name: 'git', shell: '/bin/sh') {
-                                // Debug: Check Java and Maven versions in the container
-                                sh 'echo "==== JAVA VERSION ===="'
-                                sh 'java -version || echo "Java not found"'
-                                sh 'echo "==== MAVEN VERSION ===="'
-                                sh 'mvn -v || echo "Maven not found"'
+                        container(name: 'git', shell: '/bin/sh') {
+                             // Debug: Check Java and Maven versions in the container
+                             sh 'echo "==== JAVA VERSION ===="'
+                             sh 'java -version || echo "Java not found"'
+                             sh 'echo "==== MAVEN VERSION ===="'
+                             sh 'mvn -v || echo "Maven not found"'
 
                             // Existing logic
-                            scmVars['VERSION'] = sh (script:
-                                    '/scripts/get_application_version.sh ${BUILD_PATH}',
-                                    returnStdout: true).trim()
-                            scmVars['ACTUAL_COMMIT'] = sh (script:
-                                    '/scripts/get_folder_commit.sh ${BUILD_PATH}',
-                                    returnStdout: true).trim()
-                            scmVars['BRANCH'] = scmVars['GIT_BRANCH'].replaceFirst("origin/", "")
+                        scmVars['VERSION'] = sh (script:
+                               '/scripts/get_application_version.sh ${BUILD_PATH}',
+                               returnStdout: true).trim()
+                        scmVars['ACTUAL_COMMIT'] = sh (script:
+                               '/scripts/get_folder_commit.sh ${BUILD_PATH}',
+                               returnStdout: true).trim()
+                        scmVars['BRANCH'] = scmVars['GIT_BRANCH'].replaceFirst("origin/", "")
                         }
                     }
                 }
