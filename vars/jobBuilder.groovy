@@ -2,6 +2,85 @@ import org.egov.jenkins.ConfigParser
 import org.egov.jenkins.Utils
 import org.egov.jenkins.models.JobConfig
 import org.egov.jenkins.models.BuildConfig
+import jenkins.model.Jenkins
+import com.cloudbees.hudson.plugins.folder.Folder
+import org.jenkinsci.plugins.workflow.job.WorkflowJob
+import org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition
+import hudson.plugins.git.GitSCM
+import hudson.plugins.git.UserRemoteConfig
+import hudson.plugins.git.BranchSpec
+import hudson.model.ParametersDefinitionProperty
+import hudson.plugins.gitparameter.GitParameterDefinition
+import hudson.plugins.gitparameter.SortMode
+import hudson.plugins.gitparameter.SelectedValue
+import hudson.model.BooleanParameterDefinition
+import hudson.tasks.LogRotator
+
+@NonCPS
+def createFolders(List<String> paths) {
+    Jenkins j = Jenkins.get()
+    for (String folderPath : paths) {
+        String[] parts = folderPath.split("/")
+        ItemGroup parent = j
+        for (String part : parts) {
+            Item existing = parent.getItem(part)
+            if (existing == null) {
+                parent = parent.createProject(Folder.class, part)
+            } else if (existing instanceof Folder) {
+                parent = existing
+            }
+        }
+    }
+}
+
+@NonCPS
+def createOrUpdateJob(String gitUrl, String jobName) {
+    Jenkins j = Jenkins.get()
+    ItemGroup parent = j
+    String shortName = jobName
+    if (jobName.contains("/")) {
+        int lastSlash = jobName.lastIndexOf("/")
+        String folderPath = jobName.substring(0, lastSlash)
+        shortName = jobName.substring(lastSlash + 1)
+        Item item = j
+        for (String seg : folderPath.split("/")) {
+            item = item.getItem(seg)
+        }
+        parent = item
+    }
+
+    WorkflowJob job = parent.getItem(shortName)
+    if (job == null) {
+        job = parent.createProject(WorkflowJob.class, shortName)
+    }
+
+    job.setLogRotator(new LogRotator(-1, 5, -1, -1))
+
+    job.definition = new CpsScmFlowDefinition(
+        new GitSCM(
+            [new UserRemoteConfig(gitUrl, null, null, "git_read")] as List,
+            [new BranchSpec('${BRANCH}')] as List,
+            false, [], [], null
+        ),
+        "Jenkinsfile"
+    )
+
+    def oldParams = job.getProperty(ParametersDefinitionProperty.class)
+    if (oldParams != null) {
+        job.removeProperty(oldParams)
+    }
+    job.addProperty(new ParametersDefinitionProperty(
+        new GitParameterDefinition(
+            "BRANCH",
+            GitParameterDefinition.GitParameterType.PT_BRANCH_TAG,
+            "", "", "origin/master", ".*", "*",
+            SortMode.ASCENDING_SMART, SelectedValue.DEFAULT, true, 5
+        ),
+        new BooleanParameterDefinition("ALT_REPO_PUSH", false, "Check to push images to GCR")
+    ))
+
+    job.save()
+}
 
 def call(Map params) {
 
@@ -46,7 +125,6 @@ spec:
         List<String> gitUrls = params.urls;
         String configFile = './build/build-config.yml';
         Map<String,List<JobConfig>> jobConfigMap=new HashMap<>();
-        StringBuilder jobDslScript = new StringBuilder();
         List<String> allJobConfigs = new ArrayList<>();
 
         for (int i = 0; i < gitUrls.size(); i++) {
@@ -63,69 +141,27 @@ spec:
         Set<String> repoSet = new HashSet<>();
         String repoList = "";
 
-        List<String> folders = Utils.foldersToBeCreatedOrUpdated(allJobConfigs, env);
-                  for (int j = 0; j < folders.size(); j++) {
-                      jobDslScript.append("""
-                          folder("${folders[j]}")
-                          """);
-                    }
+        List<String> foldersList = Utils.foldersToBeCreatedOrUpdated(allJobConfigs, env);
 
-        for (Map.Entry<Integer, String> entry : jobConfigMap.entrySet()) {   
-
-            List<JobConfig> jobConfigs = entry.getValue();
-
-        for (int i = 0; i < jobConfigs.size(); i++) {
-
-            for(int j=0; j<jobConfigs.get(i).getBuildConfigs().size(); j++){
-                BuildConfig buildConfig = jobConfigs.get(i).getBuildConfigs().get(j);
-                repoSet.add(buildConfig.getImageName());                    
-            }  
-
-            repoList = String.join(",", repoSet);     
-
-            jobDslScript.append("""
-            pipelineJob("${jobConfigs.get(i).getName()}") {
-                logRotator(-1, 5, -1, -1)
-                parameters {  
-                  gitParameterDefinition {
-                        name('BRANCH')
-                        type('PT_BRANCH_TAG')
-                        description('') 
-                        branch('')      
-                        useRepository('')                     
-                        defaultValue('origin/master') 
-                        branchFilter('.*')
-                        tagFilter('*')
-                        sortMode('ASCENDING_SMART')
-                        selectedValue('DEFAULT')
-                        quickFilterEnabled(true)
-                        listSize('5')                 
-                }
-                  booleanParam('ALT_REPO_PUSH', false, 'Check to push images to GCR')
-            }
-                definition {
-                    cpsScm {
-                        scm {
-                            git{
-                                remote {
-                                    url("${entry.getKey()}")
-                                    credentials('git_read')
-                                } 
-                                branch ('\${BRANCH}')
-                                scriptPath('Jenkinsfile')
-                                extensions { }
-                            }
-                        }
-
-                    }
+        for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
+            for (int i = 0; i < entry.getValue().size(); i++) {
+                for (int j = 0; j < entry.getValue().get(i).getBuildConfigs().size(); j++) {
+                    repoSet.add(entry.getValue().get(i).getBuildConfigs().get(j).getImageName())
                 }
             }
-""");
         }
-        }
+        repoList = String.join(",", repoSet);
 
         stage('Building jobs') {
-           jobDsl scriptText: jobDslScript.toString()
+            script {
+                createFolders(foldersList)
+                for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
+                    String gitUrl = entry.getKey()
+                    for (int i = 0; i < entry.getValue().size(); i++) {
+                        createOrUpdateJob(gitUrl, entry.getValue().get(i).getName())
+                    }
+                }
+            }
         }
 
         stage('Creating Repositories in DockerHub') {
@@ -133,11 +169,9 @@ spec:
                     ]) {
                         container(name: 'build-utils', shell: '/bin/sh') {
                             sh (script:'sh /tmp/scripts/create_repo.sh')
-                           //sh (script:'echo \$REPO_LIST')
                         }
                     }
         }
-                
 
     }
 
