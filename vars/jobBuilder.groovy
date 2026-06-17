@@ -60,13 +60,11 @@ spec:
 
         for (int i = 0; i < gitUrls.size(); i++) {
             String dirName = Utils.getDirName(gitUrls[i]);
+            sshagent(credentials: ['git_read']) {
+                sh(script: "GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no' git clone --depth 1 ${gitUrls[i]} ${dirName} 2>&1")
+            }
             dir(dirName) {
-                 checkout([
-                     $class: 'GitSCM',
-                     branches: [[name: '*/master']],
-                     userRemoteConfigs: [[url: gitUrls[i], credentialsId: 'git_read']],
-                     extensions: [[$class: 'CloneOption', depth: 1, noTags: true, honorRefspec: true]]
-                 ])
+                 def yaml = readYaml file: configFile;
                  def yaml = readYaml file: configFile;
                  List<JobConfig> jobConfigs = ConfigParser.populateConfigs(yaml.config, env);
                  jobConfigMap.put(gitUrls[i],jobConfigs);
