@@ -61,7 +61,12 @@ spec:
         for (int i = 0; i < gitUrls.size(); i++) {
             String dirName = Utils.getDirName(gitUrls[i]);
             dir(dirName) {
-                 git url: gitUrls[i], credentialsId: 'git_read'
+                 checkout([
+                     $class: 'GitSCM',
+                     branches: [[name: '*/master']],
+                     userRemoteConfigs: [[url: gitUrls[i], credentialsId: 'git_read']],
+                     extensions: [[$class: 'CloneOption', depth: 1, noTags: true, honorRefspec: true]]
+                 ])
                  def yaml = readYaml file: configFile;
                  List<JobConfig> jobConfigs = ConfigParser.populateConfigs(yaml.config, env);
                  jobConfigMap.put(gitUrls[i],jobConfigs);
