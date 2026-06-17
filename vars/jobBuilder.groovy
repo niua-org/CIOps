@@ -32,6 +32,16 @@ spec:
         value: nudmcdg
       - name: DOCKER_GROUP_NAME  
         value: dev
+      - name: JK_USER
+        valueFrom:
+          secretKeyRef:
+            name: test-jenkins
+            key: jenkins-admin-user
+      - name: JK_PASS
+        valueFrom:
+          secretKeyRef:
+            name: test-jenkins
+            key: jenkins-admin-password
     resources:
       requests:
         memory: "768Mi"
@@ -74,12 +84,12 @@ spec:
         repoList = String.join(",", repoSet);
 
         stage('Building jobs') {
+            // Run at node level (jnlp container has curl)
             String jkUrl = (env.JENKINS_URL ?: "http://test-jenkins.jenkins.svc.cluster.local:8080/").replaceAll("/+\$", "") + "/"
-            String pass = sh(script: "cat /run/secrets/additional/chart-admin-password", returnStdout: true).trim()
-            String auth = "admin:${pass}"
+            String ws = pwd()
 
             // Get CSRF crumb
-            String crumb = sh(script: "curl -s -u '${auth}' '${jkUrl}crumbIssuer/api/xml?xpath=concat(//crumbRequestField,':',//crumb)'", returnStdout: true).trim()
+            String crumb = sh(script: "curl -s -u \"\${JK_USER}:\${JK_PASS}\" \"${jkUrl}crumbIssuer/api/xml?xpath=concat(//crumbRequestField,':',//crumb)\"", returnStdout: true).trim()
 
             // Create folders
             for (int j = 0; j < foldersList.size(); j++) {
@@ -87,10 +97,10 @@ spec:
                 String parentPath = ""
                 for (int k = 0; k < parts.size(); k++) {
                     String currentPath = parentPath.isEmpty() ? parts[k] : parentPath + "/" + parts[k]
-                    String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u '${auth}' '${jkUrl}job/${currentPath}/api/json'", returnStdout: true).trim()
+                    String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u \"\${JK_USER}:\${JK_PASS}\" \"${jkUrl}job/${currentPath}/api/json\"", returnStdout: true).trim()
                     if (exists == "404") {
                         String url = parentPath.isEmpty() ? "${jkUrl}createItem?name=${parts[k]}" : "${jkUrl}job/${parentPath}/createItem?name=${parts[k]}"
-                        sh(script: "curl -s -X POST -u '${auth}' -H 'Content-Type: application/xml' -H '${crumb}' -d '<com.cloudbees.hudson.plugins.folder.Folder><description></description></com.cloudbees.hudson.plugins.folder.Folder>' '${url}'")
+                        sh(script: "curl -s -X POST -u \"\${JK_USER}:\${JK_PASS}\" -H 'Content-Type: application/xml' -H \"${crumb}\" -d '<com.cloudbees.hudson.plugins.folder.Folder><description></description></com.cloudbees.hudson.plugins.folder.Folder>' \"${url}\"")
                     }
                     parentPath = currentPath
                 }
@@ -112,8 +122,10 @@ spec:
 
                     String createUrl = parentFolder ? "${jkUrl}job/${parentFolder}/createItem?name=${shortName}" : "${jkUrl}createItem?name=${jobName}"
 
-                    // Write XML to workspace
-                    String xml = """<?xml version='1.1' encoding='UTF-8'?>
+                    // Write XML via heredoc (avoids writeFile cross-container issues)
+                    sh(script: """
+cat > ${ws}/job-${jobIdx}.xml << 'XMLEOF'
+<?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job">
   <description></description>
   <keepDependencies>false</keepDependencies>
@@ -152,15 +164,16 @@ spec:
     <lightweight>false</lightweight>
   </definition>
   <disabled>false</disabled>
-</flow-definition>"""
-                    writeFile file: "job-${jobIdx}-${BUILD_NUMBER}.xml", text: xml
+</flow-definition>
+XMLEOF
+""")
 
-                    String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u '${auth}' '${jkUrl}job/${jobName}/api/json'", returnStdout: true).trim()
+                    String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u \"\${JK_USER}:\${JK_PASS}\" \"${jkUrl}job/${jobName}/api/json\"", returnStdout: true).trim()
 
                     if (exists != "404") {
-                        sh(script: "curl -s -X POST -u '${auth}' -H 'Content-Type: application/xml' -H '${crumb}' --data-binary @${WORKSPACE}/job-${jobIdx}-${BUILD_NUMBER}.xml '${jkUrl}job/${jobName}/config.xml'")
+                        sh(script: "curl -s -X POST -u \"\${JK_USER}:\${JK_PASS}\" -H 'Content-Type: application/xml' -H \"${crumb}\" --data-binary @${ws}/job-${jobIdx}.xml \"${jkUrl}job/${jobName}/config.xml\"")
                     } else {
-                        sh(script: "curl -s -X POST -u '${auth}' -H 'Content-Type: application/xml' -H '${crumb}' --data-binary @${WORKSPACE}/job-${jobIdx}-${BUILD_NUMBER}.xml '${createUrl}'")
+                        sh(script: "curl -s -X POST -u \"\${JK_USER}:\${JK_PASS}\" -H 'Content-Type: application/xml' -H \"${crumb}\" --data-binary @${ws}/job-${jobIdx}.xml \"${createUrl}\"")
                     }
 
                     jobIdx++
