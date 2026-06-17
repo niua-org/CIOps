@@ -2,85 +2,6 @@ import org.egov.jenkins.ConfigParser
 import org.egov.jenkins.Utils
 import org.egov.jenkins.models.JobConfig
 import org.egov.jenkins.models.BuildConfig
-import jenkins.model.Jenkins
-import com.cloudbees.hudson.plugins.folder.Folder
-import org.jenkinsci.plugins.workflow.job.WorkflowJob
-import org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition
-import hudson.plugins.git.GitSCM
-import hudson.plugins.git.UserRemoteConfig
-import hudson.plugins.git.BranchSpec
-import hudson.model.ParametersDefinitionProperty
-import hudson.plugins.gitparameter.GitParameterDefinition
-import hudson.plugins.gitparameter.SortMode
-import hudson.plugins.gitparameter.SelectedValue
-import hudson.model.BooleanParameterDefinition
-import hudson.tasks.LogRotator
-
-@NonCPS
-def createFolders(List<String> paths) {
-    Jenkins j = Jenkins.get()
-    for (String folderPath : paths) {
-        String[] parts = folderPath.split("/")
-        ItemGroup parent = j
-        for (String part : parts) {
-            Item existing = parent.getItem(part)
-            if (existing == null) {
-                parent = parent.createProject(Folder.class, part)
-            } else if (existing instanceof Folder) {
-                parent = existing
-            }
-        }
-    }
-}
-
-@NonCPS
-def createOrUpdateJob(String gitUrl, String jobName) {
-    Jenkins j = Jenkins.get()
-    ItemGroup parent = j
-    String shortName = jobName
-    if (jobName.contains("/")) {
-        int lastSlash = jobName.lastIndexOf("/")
-        String folderPath = jobName.substring(0, lastSlash)
-        shortName = jobName.substring(lastSlash + 1)
-        Item item = j
-        for (String seg : folderPath.split("/")) {
-            item = item.getItem(seg)
-        }
-        parent = item
-    }
-
-    WorkflowJob job = parent.getItem(shortName)
-    if (job == null) {
-        job = parent.createProject(WorkflowJob.class, shortName)
-    }
-
-    job.setLogRotator(new LogRotator(-1, 5, -1, -1))
-
-    job.definition = new CpsScmFlowDefinition(
-        new GitSCM(
-            [new UserRemoteConfig(gitUrl, null, null, "git_read")] as List,
-            [new BranchSpec('${BRANCH}')] as List,
-            false, [], [], null
-        ),
-        "Jenkinsfile"
-    )
-
-    def oldParams = job.getProperty(ParametersDefinitionProperty.class)
-    if (oldParams != null) {
-        job.removeProperty(oldParams)
-    }
-    job.addProperty(new ParametersDefinitionProperty(
-        new GitParameterDefinition(
-            "BRANCH",
-            GitParameterDefinition.GitParameterType.PT_BRANCH_TAG,
-            "", "", "origin/master", ".*", "*",
-            SortMode.ASCENDING_SMART, SelectedValue.DEFAULT, true, 5
-        ),
-        new BooleanParameterDefinition("ALT_REPO_PUSH", false, "Check to push images to GCR")
-    ))
-
-    job.save()
-}
 
 def call(Map params) {
 
@@ -154,23 +75,131 @@ spec:
 
         stage('Building jobs') {
             script {
-                createFolders(foldersList)
-                for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
-                    String gitUrl = entry.getKey()
-                    for (int i = 0; i < entry.getValue().size(); i++) {
-                        createOrUpdateJob(gitUrl, entry.getValue().get(i).getName())
+                String jkUrl = (env.JENKINS_URL ?: "http://test-jenkins.jenkins.svc.cluster.local:8080/").replaceAll("/+\$", "") + "/"
+
+                withCredentials([
+                    usernamePassword(credentialsId: 'jenkins-admin-creds', usernameVariable: 'JK_USER', passwordVariable: 'JK_PASS')
+                ]) {
+                    // Get CSRF crumb
+                    def crumbResp = httpRequest(
+                        url: "${jkUrl}crumbIssuer/api/xml?xpath=concat(//crumbRequestField,':',//crumb)",
+                        authentication: "jenkins-admin-creds",
+                        validResponseCodes: "200"
+                    )
+                    String crumb = crumbResp.content.trim()
+
+                    // Create folders
+                    def jenkins = Jenkins.get()
+                    for (int j = 0; j < foldersList.size(); j++) {
+                        List<String> parts = foldersList[j].split("/")
+                        ItemGroup parent = jenkins
+                        for (int k = 0; k < parts.size(); k++) {
+                            Item existing = parent.getItem(parts[k])
+                            if (existing == null) {
+                                parent = parent.createProject(com.cloudbees.hudson.plugins.folder.Folder.class, parts[k])
+                            } else if (existing instanceof com.cloudbees.hudson.plugins.folder.Folder) {
+                                parent = existing
+                            }
+                        }
+                    }
+
+                    // Create pipeline jobs via Jenkins API
+                    for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
+                        String gitUrl = entry.getKey()
+                        for (int i = 0; i < entry.getValue().size(); i++) {
+                            String jobName = entry.getValue().get(i).getName()
+                            String shortName = jobName
+                            String parentFolder = ""
+                            if (jobName.contains("/")) {
+                                int lastSlash = jobName.lastIndexOf("/")
+                                parentFolder = jobName.substring(0, lastSlash)
+                                shortName = jobName.substring(lastSlash + 1)
+                            }
+
+                            // Generate job XML
+                            String xml = """<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>BRANCH</name>
+          <defaultValue>origin/master</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>ALT_REPO_PUSH</name>
+          <defaultValue>false</defaultValue>
+          <description>Check to push images to GCR</description>
+        </hudson.model.BooleanParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps">
+    <scm class="hudson.plugins.git.GitSCM" plugin="git">
+      <configVersion>2</configVersion>
+      <userRemoteConfigs>
+        <hudson.plugins.git.UserRemoteConfig>
+          <url>${gitUrl}</url>
+          <credentialsId>git_read</credentialsId>
+        </hudson.plugins.git.UserRemoteConfig>
+      </userRemoteConfigs>
+      <branches>
+        <hudson.plugins.git.BranchSpec>
+          <name>\${BRANCH}</name>
+        </hudson.plugins.git.BranchSpec>
+      </branches>
+    </scm>
+    <scriptPath>Jenkinsfile</scriptPath>
+    <lightweight>false</lightweight>
+  </definition>
+  <disabled>false</disabled>
+</flow-definition>"""
+
+                            String apiPath = "job/${jobName}"
+                            String createUrl = parentFolder ? "${jkUrl}job/${parentFolder}/createItem?name=${shortName}" : "${jkUrl}createItem?name=${jobName}"
+
+                            // Check if job exists
+                            def checkResp = httpRequest(
+                                url: "${jkUrl}${apiPath}/api/json",
+                                authentication: "jenkins-admin-creds",
+                                validResponseCodes: "200,404"
+                            )
+
+                            if (checkResp.status == 200) {
+                                // Update
+                                httpRequest(
+                                    url: "${jkUrl}${apiPath}/config.xml",
+                                    httpMode: 'POST',
+                                    contentType: 'APPLICATION_XML',
+                                    requestBody: xml,
+                                    customHeaders: [[name: crumb.split(":")[0], value: crumb.split(":")[1]]],
+                                    authentication: "jenkins-admin-creds"
+                                )
+                            } else {
+                                // Create
+                                httpRequest(
+                                    url: createUrl,
+                                    httpMode: 'POST',
+                                    contentType: 'APPLICATION_XML',
+                                    requestBody: xml,
+                                    customHeaders: [[name: crumb.split(":")[0], value: crumb.split(":")[1]]],
+                                    authentication: "jenkins-admin-creds"
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
         stage('Creating Repositories in DockerHub') {
-                    withEnv(["REPO_LIST=${repoList}"
-                    ]) {
-                        container(name: 'build-utils', shell: '/bin/sh') {
-                            sh (script:'sh /tmp/scripts/create_repo.sh')
-                        }
-                    }
+            withEnv(["REPO_LIST=${repoList}"]) {
+                container(name: 'build-utils', shell: '/bin/sh') {
+                    sh (script:'sh /tmp/scripts/create_repo.sh')
+                }
+            }
         }
 
     }
