@@ -32,16 +32,6 @@ spec:
         value: nudmcdg
       - name: DOCKER_GROUP_NAME  
         value: dev
-      - name: JK_USER
-        valueFrom:
-          secretKeyRef:
-            name: test-jenkins
-            key: jenkins-admin-user
-      - name: JK_PASS
-        valueFrom:
-          secretKeyRef:
-            name: test-jenkins
-            key: jenkins-admin-password
     resources:
       requests:
         memory: "768Mi"
@@ -56,15 +46,13 @@ spec:
         List<String> gitUrls = params.urls;
         String configFile = './build/build-config.yml';
         Map<String,List<JobConfig>> jobConfigMap=new HashMap<>();
+        StringBuilder jobDslScript = new StringBuilder();
         List<String> allJobConfigs = new ArrayList<>();
 
         for (int i = 0; i < gitUrls.size(); i++) {
             String dirName = Utils.getDirName(gitUrls[i]);
-            sshagent(credentials: ['git_read']) {
-                sh(script: "GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no' git clone --depth 1 ${gitUrls[i]} ${dirName} 2>&1")
-            }
             dir(dirName) {
-                 def yaml = readYaml file: configFile;
+                 git url: gitUrls[i], credentialsId: 'git_read'
                  def yaml = readYaml file: configFile;
                  List<JobConfig> jobConfigs = ConfigParser.populateConfigs(yaml.config, env);
                  jobConfigMap.put(gitUrls[i],jobConfigs);
@@ -75,122 +63,80 @@ spec:
         Set<String> repoSet = new HashSet<>();
         String repoList = "";
 
-        List<String> foldersList = Utils.foldersToBeCreatedOrUpdated(allJobConfigs, env);
+        List<String> folders = Utils.foldersToBeCreatedOrUpdated(allJobConfigs, env);
+                  for (int j = 0; j < folders.size(); j++) {
+                      jobDslScript.append("""
+                          folder("${folders[j]}")
+                          """);
+                    }
 
-        for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
-            for (int i = 0; i < entry.getValue().size(); i++) {
-                for (int j = 0; j < entry.getValue().get(i).getBuildConfigs().size(); j++) {
-                    repoSet.add(entry.getValue().get(i).getBuildConfigs().get(j).getImageName())
+        for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {   
+
+            List<JobConfig> jobConfigs = entry.getValue();
+
+        for (int i = 0; i < jobConfigs.size(); i++) {
+
+            for(int j=0; j<jobConfigs.get(i).getBuildConfigs().size(); j++){
+                BuildConfig buildConfig = jobConfigs.get(i).getBuildConfigs().get(j);
+                repoSet.add(buildConfig.getImageName());                    
+            }  
+
+            repoList = String.join(",", repoSet);     
+
+            jobDslScript.append("""
+            pipelineJob("${jobConfigs.get(i).getName()}") {
+                logRotator(-1, 5, -1, -1)
+                parameters {  
+                  gitParameterDefinition {
+                        name('BRANCH')
+                        type('PT_BRANCH_TAG')
+                        description('') 
+                        branch('')      
+                        useRepository('')                     
+                        defaultValue('origin/master') 
+                        branchFilter('.*')
+                        tagFilter('*')
+                        sortMode('ASCENDING_SMART')
+                        selectedValue('DEFAULT')
+                        quickFilterEnabled(true)
+                        listSize('5')                 
+                }
+                  booleanParam('ALT_REPO_PUSH', false, 'Check to push images to GCR')
+            }
+                definition {
+                    cpsScm {
+                        scm {
+                            git{
+                                remote {
+                                    url("${entry.getKey()}")
+                                    credentials('git_read')
+                                } 
+                                branch ('\${BRANCH}')
+                                scriptPath('Jenkinsfile')
+                                extensions { }
+                            }
+                        }
+
+                    }
                 }
             }
+""");
         }
-        repoList = String.join(",", repoSet);
+        }
 
         stage('Building jobs') {
-            container('build-utils') {
-                String jkUrl = (env.JENKINS_URL ?: "http://test-jenkins.jenkins.svc.cluster.local:8080/").replaceAll("/+\$", "") + "/"
-                String ws = pwd()
-
-                // Get CSRF crumb
-                String crumb = sh(script: "curl -s -u \"${JK_USER}:${JK_PASS}\" \"${jkUrl}crumbIssuer/api/xml?xpath=concat(//crumbRequestField,':',//crumb)\"", returnStdout: true).trim()
-
-                // Create folders
-                for (int j = 0; j < foldersList.size(); j++) {
-                    List<String> parts = foldersList[j].tokenize("/")
-                    String parentPath = ""
-                    for (int k = 0; k < parts.size(); k++) {
-                        String currentPath = parentPath.isEmpty() ? parts[k] : parentPath + "/" + parts[k]
-                        String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u \"${JK_USER}:${JK_PASS}\" \"${jkUrl}job/${currentPath}/api/json\"", returnStdout: true).trim()
-                        if (exists == "404") {
-                            String url = parentPath.isEmpty() ? "${jkUrl}createItem?name=${parts[k]}" : "${jkUrl}job/${parentPath}/createItem?name=${parts[k]}"
-                            sh(script: "curl -s -X POST -u \"${JK_USER}:${JK_PASS}\" -H 'Content-Type: application/xml' -H \"${crumb}\" -d '<com.cloudbees.hudson.plugins.folder.Folder><description></description></com.cloudbees.hudson.plugins.folder.Folder>' \"${url}\"")
-                        }
-                        parentPath = currentPath
-                    }
-                }
-
-                // Create pipeline jobs
-                int jobIdx = 0
-                for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
-                    String gitUrl = entry.getKey()
-                    for (int i = 0; i < entry.getValue().size(); i++) {
-                        String jobName = entry.getValue().get(i).getName()
-                        String shortName = jobName
-                        String parentFolder = ""
-                        if (jobName.contains("/")) {
-                            int lastSlash = jobName.lastIndexOf("/")
-                            parentFolder = jobName.substring(0, lastSlash)
-                            shortName = jobName.substring(lastSlash + 1)
-                        }
-
-                        String createUrl = parentFolder ? "${jkUrl}job/${parentFolder}/createItem?name=${shortName}" : "${jkUrl}createItem?name=${jobName}"
-
-                        sh(script: """
-cat > ${ws}/job-${jobIdx}.xml << 'XMLEOF'
-<?xml version='1.1' encoding='UTF-8'?>
-<flow-definition plugin="workflow-job">
-  <description></description>
-  <keepDependencies>false</keepDependencies>
-  <properties>
-    <hudson.model.ParametersDefinitionProperty>
-      <parameterDefinitions>
-        <hudson.model.StringParameterDefinition>
-          <name>BRANCH</name>
-          <defaultValue>origin/master</defaultValue>
-          <description>Branch to build</description>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.BooleanParameterDefinition>
-          <name>ALT_REPO_PUSH</name>
-          <defaultValue>false</defaultValue>
-          <description>Check to push images to GCR</description>
-        </hudson.model.BooleanParameterDefinition>
-      </parameterDefinitions>
-    </hudson.model.ParametersDefinitionProperty>
-  </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps">
-    <scm class="hudson.plugins.git.GitSCM" plugin="git">
-      <configVersion>2</configVersion>
-      <userRemoteConfigs>
-        <hudson.plugins.git.UserRemoteConfig>
-          <url>${gitUrl}</url>
-          <credentialsId>git_read</credentialsId>
-        </hudson.plugins.git.UserRemoteConfig>
-      </userRemoteConfigs>
-      <branches>
-        <hudson.plugins.git.BranchSpec>
-          <name>\${BRANCH}</name>
-        </hudson.plugins.git.BranchSpec>
-      </branches>
-    </scm>
-    <scriptPath>Jenkinsfile</scriptPath>
-    <lightweight>false</lightweight>
-  </definition>
-  <disabled>false</disabled>
-</flow-definition>
-XMLEOF
-""")
-
-                        String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u \"${JK_USER}:${JK_PASS}\" \"${jkUrl}job/${jobName}/api/json\"", returnStdout: true).trim()
-
-                        if (exists != "404") {
-                            sh(script: "curl -s -X POST -u \"${JK_USER}:${JK_PASS}\" -H 'Content-Type: application/xml' -H \"${crumb}\" --data-binary @${ws}/job-${jobIdx}.xml \"${jkUrl}job/${jobName}/config.xml\"")
-                        } else {
-                            sh(script: "curl -s -X POST -u \"${JK_USER}:${JK_PASS}\" -H 'Content-Type: application/xml' -H \"${crumb}\" --data-binary @${ws}/job-${jobIdx}.xml \"${createUrl}\"")
-                        }
-
-                        jobIdx++
-                    }
-                }
-            }
+           jobDsl scriptText: jobDslScript.toString()
         }
 
         stage('Creating Repositories in DockerHub') {
-            withEnv(["REPO_LIST=${repoList}"]) {
-                container(name: 'build-utils', shell: '/bin/sh') {
-                    sh (script:'sh /tmp/scripts/create_repo.sh')
-                }
-            }
+                    withEnv(["REPO_LIST=${repoList}"
+                    ]) {
+                        container(name: 'build-utils', shell: '/bin/sh') {
+                            sh (script:'sh /tmp/scripts/create_repo.sh')
+                        }
+                    }
         }
+                
 
     }
 
