@@ -32,6 +32,16 @@ spec:
         value: nudmcdg
       - name: DOCKER_GROUP_NAME  
         value: dev
+      - name: JK_USER
+        valueFrom:
+          secretKeyRef:
+            name: test-jenkins
+            key: jenkins-admin-user
+      - name: JK_PASS
+        valueFrom:
+          secretKeyRef:
+            name: test-jenkins
+            key: jenkins-admin-password
     resources:
       requests:
         memory: "768Mi"
@@ -74,46 +84,45 @@ spec:
         repoList = String.join(",", repoSet);
 
         stage('Building jobs') {
-            String adminUser = "admin"
-            String adminPass = "admin123"
-            String jkUrl = (env.JENKINS_URL ?: "http://test-jenkins.jenkins.svc.cluster.local:8080/").replaceAll("/+\$", "") + "/"
-            String ws = pwd()
+            container('build-utils') {
+                String jkUrl = (env.JENKINS_URL ?: "http://test-jenkins.jenkins.svc.cluster.local:8080/").replaceAll("/+\$", "") + "/"
+                String ws = pwd()
 
-            // Get CSRF crumb
-            String crumb = sh(script: "curl -s -u \"${adminUser}:${adminPass}\" \"${jkUrl}crumbIssuer/api/xml?xpath=concat(//crumbRequestField,':',//crumb)\"", returnStdout: true).trim()
+                // Get CSRF crumb
+                String crumb = sh(script: "curl -s -u \"${JK_USER}:${JK_PASS}\" \"${jkUrl}crumbIssuer/api/xml?xpath=concat(//crumbRequestField,':',//crumb)\"", returnStdout: true).trim()
 
-            // Create folders
-            for (int j = 0; j < foldersList.size(); j++) {
-                List<String> parts = foldersList[j].tokenize("/")
-                String parentPath = ""
-                for (int k = 0; k < parts.size(); k++) {
-                    String currentPath = parentPath.isEmpty() ? parts[k] : parentPath + "/" + parts[k]
-                    String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u \"${adminUser}:${adminPass}\" \"${jkUrl}job/${currentPath}/api/json\"", returnStdout: true).trim()
-                    if (exists == "404") {
-                        String url = parentPath.isEmpty() ? "${jkUrl}createItem?name=${parts[k]}" : "${jkUrl}job/${parentPath}/createItem?name=${parts[k]}"
-                        sh(script: "curl -s -X POST -u \"${adminUser}:${adminPass}\" -H 'Content-Type: application/xml' -H \"${crumb}\" -d '<com.cloudbees.hudson.plugins.folder.Folder><description></description></com.cloudbees.hudson.plugins.folder.Folder>' \"${url}\"")
+                // Create folders
+                for (int j = 0; j < foldersList.size(); j++) {
+                    List<String> parts = foldersList[j].tokenize("/")
+                    String parentPath = ""
+                    for (int k = 0; k < parts.size(); k++) {
+                        String currentPath = parentPath.isEmpty() ? parts[k] : parentPath + "/" + parts[k]
+                        String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u \"${JK_USER}:${JK_PASS}\" \"${jkUrl}job/${currentPath}/api/json\"", returnStdout: true).trim()
+                        if (exists == "404") {
+                            String url = parentPath.isEmpty() ? "${jkUrl}createItem?name=${parts[k]}" : "${jkUrl}job/${parentPath}/createItem?name=${parts[k]}"
+                            sh(script: "curl -s -X POST -u \"${JK_USER}:${JK_PASS}\" -H 'Content-Type: application/xml' -H \"${crumb}\" -d '<com.cloudbees.hudson.plugins.folder.Folder><description></description></com.cloudbees.hudson.plugins.folder.Folder>' \"${url}\"")
+                        }
+                        parentPath = currentPath
                     }
-                    parentPath = currentPath
                 }
-            }
 
-            // Create pipeline jobs
-            int jobIdx = 0
-            for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
-                String gitUrl = entry.getKey()
-                for (int i = 0; i < entry.getValue().size(); i++) {
-                    String jobName = entry.getValue().get(i).getName()
-                    String shortName = jobName
-                    String parentFolder = ""
-                    if (jobName.contains("/")) {
-                        int lastSlash = jobName.lastIndexOf("/")
-                        parentFolder = jobName.substring(0, lastSlash)
-                        shortName = jobName.substring(lastSlash + 1)
-                    }
+                // Create pipeline jobs
+                int jobIdx = 0
+                for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
+                    String gitUrl = entry.getKey()
+                    for (int i = 0; i < entry.getValue().size(); i++) {
+                        String jobName = entry.getValue().get(i).getName()
+                        String shortName = jobName
+                        String parentFolder = ""
+                        if (jobName.contains("/")) {
+                            int lastSlash = jobName.lastIndexOf("/")
+                            parentFolder = jobName.substring(0, lastSlash)
+                            shortName = jobName.substring(lastSlash + 1)
+                        }
 
-                    String createUrl = parentFolder ? "${jkUrl}job/${parentFolder}/createItem?name=${shortName}" : "${jkUrl}createItem?name=${jobName}"
+                        String createUrl = parentFolder ? "${jkUrl}job/${parentFolder}/createItem?name=${shortName}" : "${jkUrl}createItem?name=${jobName}"
 
-                    sh(script: """
+                        sh(script: """
 cat > ${ws}/job-${jobIdx}.xml << 'XMLEOF'
 <?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job">
@@ -158,15 +167,16 @@ cat > ${ws}/job-${jobIdx}.xml << 'XMLEOF'
 XMLEOF
 """)
 
-                    String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u \"${adminUser}:${adminPass}\" \"${jkUrl}job/${jobName}/api/json\"", returnStdout: true).trim()
+                        String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u \"${JK_USER}:${JK_PASS}\" \"${jkUrl}job/${jobName}/api/json\"", returnStdout: true).trim()
 
-                    if (exists != "404") {
-                        sh(script: "curl -s -X POST -u \"${adminUser}:${adminPass}\" -H 'Content-Type: application/xml' -H \"${crumb}\" --data-binary @${ws}/job-${jobIdx}.xml \"${jkUrl}job/${jobName}/config.xml\"")
-                    } else {
-                        sh(script: "curl -s -X POST -u \"${adminUser}:${adminPass}\" -H 'Content-Type: application/xml' -H \"${crumb}\" --data-binary @${ws}/job-${jobIdx}.xml \"${createUrl}\"")
+                        if (exists != "404") {
+                            sh(script: "curl -s -X POST -u \"${JK_USER}:${JK_PASS}\" -H 'Content-Type: application/xml' -H \"${crumb}\" --data-binary @${ws}/job-${jobIdx}.xml \"${jkUrl}job/${jobName}/config.xml\"")
+                        } else {
+                            sh(script: "curl -s -X POST -u \"${JK_USER}:${JK_PASS}\" -H 'Content-Type: application/xml' -H \"${crumb}\" --data-binary @${ws}/job-${jobIdx}.xml \"${createUrl}\"")
+                        }
+
+                        jobIdx++
                     }
-
-                    jobIdx++
                 }
             }
         }
