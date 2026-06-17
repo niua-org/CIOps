@@ -5,13 +5,49 @@ import org.egov.jenkins.models.BuildConfig
 
 def call(Map params) {
 
-    List<String> gitUrls = params.urls;
-    String configFile = './build/build-config.yml';
-    Map<String,List<JobConfig>> jobConfigMap=new HashMap<>();
-    List<String> allJobConfigs = new ArrayList<>();
+    podTemplate(yaml: """
+kind: Pod
+metadata:
+  name: build-utils
+spec:
+  containers:
+  - name: build-utils
+    image: egovio/build-utils:7-master-95e76687
+    imagePullPolicy: IfNotPresent
+    command:
+    - cat
+    tty: true
+    env:
+      - name: DOCKER_UNAME
+        valueFrom:
+          secretKeyRef:
+            name: jenkins-credentials
+            key: dockerUserName
+      - name: DOCKER_UPASS
+        valueFrom:
+          secretKeyRef:
+            name: jenkins-credentials
+            key: dockerPassword
+      - name: DOCKER_NAMESPACE
+        value: nudmcdg
+      - name: DOCKER_GROUP_NAME  
+        value: dev
+    resources:
+      requests:
+        memory: "768Mi"
+        cpu: "250m"
+      limits:
+        memory: "1024Mi"
+        cpu: "500m"                
+"""
+    ) {
+        node(POD_LABEL) {
+        
+        List<String> gitUrls = params.urls;
+        String configFile = './build/build-config.yml';
+        Map<String,List<JobConfig>> jobConfigMap=new HashMap<>();
+        List<String> allJobConfigs = new ArrayList<>();
 
-    // --- Phase 1: Clone repos and parse configs (runs on Jenkins controller) ---
-    stage('Parse job configs') {
         for (int i = 0; i < gitUrls.size(); i++) {
             String dirName = Utils.getDirName(gitUrls[i]);
             dir(dirName) {
@@ -22,66 +58,62 @@ def call(Map params) {
                  allJobConfigs.addAll(jobConfigs);
             }
         }
-    }
+        
+        Set<String> repoSet = new HashSet<>();
+        String repoList = "";
 
-    Set<String> repoSet = new HashSet<>();
-    for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
-        for (int i = 0; i < entry.getValue().size(); i++) {
-            for (int j = 0; j < entry.getValue().get(i).getBuildConfigs().size(); j++) {
-                repoSet.add(entry.getValue().get(i).getBuildConfigs().get(j).getImageName())
-            }
-        }
-    }
-    String repoList = String.join(",", repoSet);
+        List<String> foldersList = Utils.foldersToBeCreatedOrUpdated(allJobConfigs, env);
 
-    List<String> foldersList = Utils.foldersToBeCreatedOrUpdated(allJobConfigs, env);
-
-    // --- Phase 2: Create folders and pipeline jobs via Jenkins API (controller has curl) ---
-    stage('Building jobs') {
-        String jkUrl = (env.JENKINS_URL ?: "http://test-jenkins.jenkins.svc.cluster.local:8080/").replaceAll("/+\$", "") + "/"
-
-        // Get admin credentials that the seed job creates automatically
-        String user = "admin"
-        String pass = sh(script: "cat /run/secrets/additional/chart-admin-password", returnStdout: true).trim()
-        String auth = "${user}:${pass}"
-
-        // Get CSRF crumb
-        String crumb = sh(script: "curl -s -u '${auth}' '${jkUrl}crumbIssuer/api/xml?xpath=concat(//crumbRequestField,':',//crumb)'", returnStdout: true).trim()
-
-        // Create folders
-        for (int j = 0; j < foldersList.size(); j++) {
-            List<String> parts = foldersList[j].tokenize("/")
-            String parentPath = ""
-            for (int k = 0; k < parts.size(); k++) {
-                String currentPath = parentPath.isEmpty() ? parts[k] : parentPath + "/" + parts[k]
-                String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u '${auth}' '${jkUrl}job/${currentPath}/api/json'", returnStdout: true).trim()
-                if (exists == "404") {
-                    String url = parentPath.isEmpty() ? "${jkUrl}createItem?name=${parts[k]}" : "${jkUrl}job/${parentPath}/createItem?name=${parts[k]}"
-                    sh(script: "curl -s -X POST -u '${auth}' -H 'Content-Type: application/xml' -H '${crumb}' -d '<com.cloudbees.hudson.plugins.folder.Folder><description></description></com.cloudbees.hudson.plugins.folder.Folder>' '${url}'")
-                }
-                parentPath = currentPath
-            }
-        }
-
-        // Create pipeline jobs
-        int jobIdx = 0
         for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
-            String gitUrl = entry.getKey()
             for (int i = 0; i < entry.getValue().size(); i++) {
-                String jobName = entry.getValue().get(i).getName()
-                String shortName = jobName
-                String parentFolder = ""
-                if (jobName.contains("/")) {
-                    int lastSlash = jobName.lastIndexOf("/")
-                    parentFolder = jobName.substring(0, lastSlash)
-                    shortName = jobName.substring(lastSlash + 1)
+                for (int j = 0; j < entry.getValue().get(i).getBuildConfigs().size(); j++) {
+                    repoSet.add(entry.getValue().get(i).getBuildConfigs().get(j).getImageName())
                 }
+            }
+        }
+        repoList = String.join(",", repoSet);
 
-                String createUrl = parentFolder ? "${jkUrl}job/${parentFolder}/createItem?name=${shortName}" : "${jkUrl}createItem?name=${jobName}"
-                String apiUrl = "${jkUrl}job/${jobName}"
+        stage('Building jobs') {
+            String jkUrl = (env.JENKINS_URL ?: "http://test-jenkins.jenkins.svc.cluster.local:8080/").replaceAll("/+\$", "") + "/"
+            String pass = sh(script: "cat /run/secrets/additional/chart-admin-password", returnStdout: true).trim()
+            String auth = "admin:${pass}"
 
-                // Write XML to workspace
-                String xml = """<?xml version='1.1' encoding='UTF-8'?>
+            // Get CSRF crumb
+            String crumb = sh(script: "curl -s -u '${auth}' '${jkUrl}crumbIssuer/api/xml?xpath=concat(//crumbRequestField,':',//crumb)'", returnStdout: true).trim()
+
+            // Create folders
+            for (int j = 0; j < foldersList.size(); j++) {
+                List<String> parts = foldersList[j].tokenize("/")
+                String parentPath = ""
+                for (int k = 0; k < parts.size(); k++) {
+                    String currentPath = parentPath.isEmpty() ? parts[k] : parentPath + "/" + parts[k]
+                    String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u '${auth}' '${jkUrl}job/${currentPath}/api/json'", returnStdout: true).trim()
+                    if (exists == "404") {
+                        String url = parentPath.isEmpty() ? "${jkUrl}createItem?name=${parts[k]}" : "${jkUrl}job/${parentPath}/createItem?name=${parts[k]}"
+                        sh(script: "curl -s -X POST -u '${auth}' -H 'Content-Type: application/xml' -H '${crumb}' -d '<com.cloudbees.hudson.plugins.folder.Folder><description></description></com.cloudbees.hudson.plugins.folder.Folder>' '${url}'")
+                    }
+                    parentPath = currentPath
+                }
+            }
+
+            // Create pipeline jobs
+            int jobIdx = 0
+            for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {
+                String gitUrl = entry.getKey()
+                for (int i = 0; i < entry.getValue().size(); i++) {
+                    String jobName = entry.getValue().get(i).getName()
+                    String shortName = jobName
+                    String parentFolder = ""
+                    if (jobName.contains("/")) {
+                        int lastSlash = jobName.lastIndexOf("/")
+                        parentFolder = jobName.substring(0, lastSlash)
+                        shortName = jobName.substring(lastSlash + 1)
+                    }
+
+                    String createUrl = parentFolder ? "${jkUrl}job/${parentFolder}/createItem?name=${shortName}" : "${jkUrl}createItem?name=${jobName}"
+
+                    // Write XML to workspace
+                    String xml = """<?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job">
   <description></description>
   <keepDependencies>false</keepDependencies>
@@ -121,66 +153,30 @@ def call(Map params) {
   </definition>
   <disabled>false</disabled>
 </flow-definition>"""
-                writeFile file: "job-${jobIdx}-${BUILD_NUMBER}.xml", text: xml
+                    writeFile file: "job-${jobIdx}-${BUILD_NUMBER}.xml", text: xml
 
-                String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u '${auth}' '${jkUrl}job/${jobName}/api/json'", returnStdout: true).trim()
+                    String exists = sh(script: "curl -s -o /dev/null -w '%{http_code}' -u '${auth}' '${jkUrl}job/${jobName}/api/json'", returnStdout: true).trim()
 
-                if (exists != "404") {
-                    sh(script: "curl -s -X POST -u '${auth}' -H 'Content-Type: application/xml' -H '${crumb}' --data-binary @${WORKSPACE}/job-${jobIdx}-${BUILD_NUMBER}.xml '${jkUrl}job/${jobName}/config.xml'")
-                } else {
-                    sh(script: "curl -s -X POST -u '${auth}' -H 'Content-Type: application/xml' -H '${crumb}' --data-binary @${WORKSPACE}/job-${jobIdx}-${BUILD_NUMBER}.xml '${createUrl}'")
-                }
-
-                jobIdx++
-            }
-        }
-    }
-
-    // --- Phase 3: Create DockerHub repos (needs build-utils container) ---
-    podTemplate(yaml: """
-kind: Pod
-metadata:
-  name: build-utils
-spec:
-  containers:
-  - name: build-utils
-    image: egovio/build-utils:7-master-95e76687
-    imagePullPolicy: IfNotPresent
-    command:
-    - cat
-    tty: true
-    env:
-      - name: DOCKER_UNAME
-        valueFrom:
-          secretKeyRef:
-            name: jenkins-credentials
-            key: dockerUserName
-      - name: DOCKER_UPASS
-        valueFrom:
-          secretKeyRef:
-            name: jenkins-credentials
-            key: dockerPassword
-      - name: DOCKER_NAMESPACE
-        value: nudmcdg
-      - name: DOCKER_GROUP_NAME  
-        value: dev
-    resources:
-      requests:
-        memory: "768Mi"
-        cpu: "250m"
-      limits:
-        memory: "1024Mi"
-        cpu: "500m"                
-"""
-    ) {
-        node(POD_LABEL) {
-            stage('Creating Repositories in DockerHub') {
-                withEnv(["REPO_LIST=${repoList}"]) {
-                    container(name: 'build-utils', shell: '/bin/sh') {
-                        sh (script:'sh /tmp/scripts/create_repo.sh')
+                    if (exists != "404") {
+                        sh(script: "curl -s -X POST -u '${auth}' -H 'Content-Type: application/xml' -H '${crumb}' --data-binary @${WORKSPACE}/job-${jobIdx}-${BUILD_NUMBER}.xml '${jkUrl}job/${jobName}/config.xml'")
+                    } else {
+                        sh(script: "curl -s -X POST -u '${auth}' -H 'Content-Type: application/xml' -H '${crumb}' --data-binary @${WORKSPACE}/job-${jobIdx}-${BUILD_NUMBER}.xml '${createUrl}'")
                     }
+
+                    jobIdx++
                 }
             }
         }
+
+        stage('Creating Repositories in DockerHub') {
+            withEnv(["REPO_LIST=${repoList}"]) {
+                container(name: 'build-utils', shell: '/bin/sh') {
+                    sh (script:'sh /tmp/scripts/create_repo.sh')
+                }
+            }
+        }
+
     }
+
+}
 }
