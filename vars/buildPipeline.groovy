@@ -32,7 +32,7 @@ spec:
             key: gitReadAccessToken                                     
     volumeMounts:
       - name: jenkins-docker-cfg
-        mountPath: /root/.docker
+        mountPath: /kaniko/.docker
       - name: kaniko-cache
         mountPath: /cache            
     resources:
