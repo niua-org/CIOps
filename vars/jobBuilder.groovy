@@ -70,7 +70,7 @@ spec:
                           """);
                     }
 
-        for (Map.Entry<String, List<JobConfig>> entry : jobConfigMap.entrySet()) {   
+        for (Map.Entry<Integer, String> entry : jobConfigMap.entrySet()) {   
 
             List<JobConfig> jobConfigs = entry.getValue();
 
@@ -125,14 +125,32 @@ spec:
         }
 
         stage('Building jobs') {
-           jobDsl scriptText: jobDslScript.toString()
-        }
+
+    echo "===== GENERATED DSL START ====="
+    echo jobDslScript.toString()
+    echo "===== GENERATED DSL END ====="
+
+    writeFile(
+        file: 'generated.dsl',
+        text: jobDslScript.toString()
+    )
+
+    sh 'ls -ltr'
+    sh 'wc -l generated.dsl'
+
+    jobDsl(
+        targets: 'generated.dsl',
+        removedJobAction: 'IGNORE',
+        removedViewAction: 'IGNORE'
+    )
+}
 
         stage('Creating Repositories in DockerHub') {
                     withEnv(["REPO_LIST=${repoList}"
                     ]) {
                         container(name: 'build-utils', shell: '/bin/sh') {
                             sh (script:'sh /tmp/scripts/create_repo.sh')
+                           //sh (script:'echo \$REPO_LIST')
                         }
                     }
         }
