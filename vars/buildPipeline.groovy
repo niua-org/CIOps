@@ -120,42 +120,11 @@ spec:
                                 buildNum = "${scmVars.VERSION}"; // Dashboard
                                 String noPushImage = env.NO_PUSH ? env.NO_PUSH : false;
                                 echo "ALT_REPO_PUSH ENABLED: ${ALT_REPO_PUSH}"
-                                echo "========== KANIKO DEBUG =========="
-                                echo "IMAGE=${image}"
-                                echo "WORKDIR=${workDir}"
-                                echo "DOCKERFILE=${buildConfig.getDockerFile()}"
-                                echo "CONTEXT=${buildConfig.getContext()}"
-                                echo "NO_PUSH=${noPushImage}"
-                                
-                                sh '''
-                                echo "===== ENV ====="
-                                env | sort | grep -E "DOCKER|GIT|PATH" || true
-                                
-                                echo "===== DOCKER CONFIG ====="
-                                echo "DOCKER_CONFIG=$DOCKER_CONFIG"
-                                
-                                ls -la /kaniko/.docker || true
-                                cat /kaniko/.docker/config.json || true
-                                
-                                echo "===== CACHE ====="
-                                mount | grep cache || true
-                                ls -la /cache || true
-                                
-                                echo "===== KANIKO VERSION ====="
-                                /kaniko/executor version || true
-                                
-                                echo "===== PWD ====="
-                                pwd
-                                
-                                echo "=========================="
-                                '''
                                  if(env.ALT_REPO_PUSH.equalsIgnoreCase("true")){
                                   String gcr_image = "${GCR_REPO_NAME}/${buildConfig.getImageName()}:${env.BUILD_NUMBER}-${scmVars.BRANCH}-${scmVars.VERSION}-${scmVars.ACTUAL_COMMIT}";
                                   sh """
                                     echo \"Attempting to build image,  ${image}\"
-                                    /kaniko/executor \
-                                    --verbosity=debug \
-                                    -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
+                                    /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
                                     --build-arg WORK_DIR=${workDir} \
                                     --build-arg token=\$GIT_ACCESS_TOKEN \
                                     --cache=true --cache-dir=/cache \
@@ -171,9 +140,7 @@ spec:
                                 else{
                                 sh """
                                     echo \"Attempting to build image,  ${image}\"
-                                    /kaniko/executor \
-                                    --verbosity=debug \
-                                    -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
+                                    /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
                                     --build-arg WORK_DIR=${workDir} \
                                     --build-arg token=\$GIT_ACCESS_TOKEN \
                                     --cache=true --cache-dir=/cache \
