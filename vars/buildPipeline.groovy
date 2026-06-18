@@ -103,23 +103,30 @@ spec:
                     withEnv(["PATH=/busybox:/kaniko:$PATH"
                     ]) {
                         container(name: 'kaniko', shell: '/busybox/sh') {
-                            sh '''
-                                echo "========== KANIKO DEBUG =========="
-                                echo "DOCKER_CONFIG=$DOCKER_CONFIG"
-                                echo "--- ENV ---"
-                                env | sort | grep -i docker || true
-                                echo "--- KANIKO CONFIG ---"
-                                ls -la /kaniko/.docker || true
-                                cat /kaniko/.docker/config.json || true
-                                echo "--- ROOT CONFIG ---"
-                                ls -la /root/.docker || true
-                                cat /root/.docker/config.json || true
-                                echo "--- CACHE ---"
-                                mount | grep cache || true
-                                echo "--- KANIKO VERSION ---"
-                                /kaniko/executor version
-                                echo "=================================="
-                                '''
+                            sh """
+                                   export DOCKER_CONFIG=/kaniko/.docker
+                               
+                                   echo "DOCKER_CONFIG=\$DOCKER_CONFIG"
+                               
+                                   ls -la \$DOCKER_CONFIG
+                                   cat \$DOCKER_CONFIG/config.json
+                               
+                                   echo "Attempting to build image, ${image}"
+                               
+                                   /kaniko/executor \
+                                     --verbosity=debug \
+                                     -f `pwd`/${buildConfig.getDockerFile()} \
+                                     -c `pwd`/${buildConfig.getContext()} \
+                                     --build-arg WORK_DIR=${workDir} \
+                                     --build-arg token=\$GIT_ACCESS_TOKEN \
+                                     --cache=true \
+                                     --cache-dir=/cache \
+                                     --single-snapshot=true \
+                                     --snapshot-mode=time \
+                                     --destination=${image} \
+                                     --no-push=${noPushImage} \
+                                     --cache-repo=nudmcdg/cache/cache
+                               """
                             for(int j=0; j<jobConfig.getBuildConfigs().size(); j++){
                                 BuildConfig buildConfig = jobConfig.getBuildConfigs().get(j)
                                 echo "${buildConfig.getWorkDir()} ${buildConfig.getDockerFile()}"
