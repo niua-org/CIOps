@@ -153,7 +153,9 @@ spec:
                                   String gcr_image = "${GCR_REPO_NAME}/${buildConfig.getImageName()}:${env.BUILD_NUMBER}-${scmVars.BRANCH}-${scmVars.VERSION}-${scmVars.ACTUAL_COMMIT}";
                                   sh """
                                     echo \"Attempting to build image,  ${image}\"
-                                    /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
+                                    /kaniko/executor \
+                                    --verbosity=debug \
+                                    -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
                                     --build-arg WORK_DIR=${workDir} \
                                     --build-arg token=\$GIT_ACCESS_TOKEN \
                                     --cache=true --cache-dir=/cache \
@@ -169,7 +171,9 @@ spec:
                                 else{
                                 sh """
                                     echo \"Attempting to build image,  ${image}\"
-                                    /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
+                                    /kaniko/executor \
+                                    --verbosity=debug \
+                                    -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
                                     --build-arg WORK_DIR=${workDir} \
                                     --build-arg token=\$GIT_ACCESS_TOKEN \
                                     --cache=true --cache-dir=/cache \
