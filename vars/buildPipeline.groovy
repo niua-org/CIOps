@@ -103,7 +103,23 @@ spec:
                     withEnv(["PATH=/busybox:/kaniko:$PATH"
                     ]) {
                         container(name: 'kaniko', shell: '/busybox/sh') {
-
+                            sh '''
+                                echo "========== KANIKO DEBUG =========="
+                                echo "DOCKER_CONFIG=$DOCKER_CONFIG"
+                                echo "--- ENV ---"
+                                env | sort | grep -i docker || true
+                                echo "--- KANIKO CONFIG ---"
+                                ls -la /kaniko/.docker || true
+                                cat /kaniko/.docker/config.json || true
+                                echo "--- ROOT CONFIG ---"
+                                ls -la /root/.docker || true
+                                cat /root/.docker/config.json || true
+                                echo "--- CACHE ---"
+                                mount | grep cache || true
+                                echo "--- KANIKO VERSION ---"
+                                /kaniko/executor version
+                                echo "=================================="
+                                '''
                             for(int j=0; j<jobConfig.getBuildConfigs().size(); j++){
                                 BuildConfig buildConfig = jobConfig.getBuildConfigs().get(j)
                                 echo "${buildConfig.getWorkDir()} ${buildConfig.getDockerFile()}"
