@@ -105,7 +105,14 @@ spec:
                         container(name: 'kaniko', shell: '/busybox/sh') {
                             for(int j=0; j<jobConfig.getBuildConfigs().size(); j++){
                                 BuildConfig buildConfig = jobConfig.getBuildConfigs().get(j)
+                                echo "=============================="
+                                echo "BUILD CONFIG INDEX = ${j}"
+                                echo "WORKSPACE = ${env.WORKSPACE}"
+                                echo "WORKDIR = ${buildConfig.getWorkDir()}"
+                                echo "DOCKERFILE = ${buildConfig.getDockerFile()}"
+                                echo "=============================="
                                 echo "${buildConfig.getWorkDir()} ${buildConfig.getDockerFile()}"
+                                sh "pwd"
                                 if( ! fileExists(buildConfig.getWorkDir()) || ! fileExists(buildConfig.getDockerFile()))
                                     throw new Exception("Working directory / dockerfile does not exist!");
 
