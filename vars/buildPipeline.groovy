@@ -140,6 +140,31 @@ spec:
                                 }
                                 else{
                                 sh """
+                                    echo "===== DEBUG START ====="
+                                    echo "PWD"
+                                    pwd
+
+                                    echo "===== CURRENT DIR ====="
+                                    ls -la
+
+                                    echo "===== BUILD CONTEXT ====="
+                                    ls -la ${buildConfig.getContext()}
+
+                                    echo "===== MIGRATION DIR ====="
+                                    ls -la ${buildConfig.getContext()}/migration
+
+                                    echo "===== MIGRATION MAIN ====="
+                                    ls -la ${buildConfig.getContext()}/migration/main
+
+                                    echo "===== MIGRATE SH ====="
+                                    ls -la ${buildConfig.getContext()}/migrate.sh
+
+                                    echo "===== DOCKERFILE ====="
+                                    cat ${buildConfig.getDockerFile()}
+
+                                    echo "===== DEBUG END ====="
+                                """
+                                sh """
                                     echo \"Attempting to build image,  ${image}\"
                                     /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
                                     --build-arg WORK_DIR=${workDir} \
