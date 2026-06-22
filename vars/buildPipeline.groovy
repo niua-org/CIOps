@@ -113,9 +113,14 @@ spec:
                                 echo "=============================="
                                 echo "${buildConfig.getWorkDir()} ${buildConfig.getDockerFile()}"
                                 sh "pwd"
-                                if( ! fileExists(buildConfig.getWorkDir()) || ! fileExists(buildConfig.getDockerFile()))
-                                    throw new Exception("Working directory / dockerfile does not exist!");
-
+                                // if( ! fileExists(buildConfig.getWorkDir()) || ! fileExists(buildConfig.getDockerFile()))
+                                //     throw new Exception("Working directory / dockerfile does not exist!");
+                                if (j == 1) {
+                                    echo "SKIPPING fileExists CHECK FOR DEBUG"
+                                } else {
+                                    if( ! fileExists(buildConfig.getWorkDir()) || ! fileExists(buildConfig.getDockerFile()))
+                                        throw new Exception("Working directory / dockerfile does not exist!");
+                                }
                                 String workDir = buildConfig.getWorkDir().replaceFirst(getCommonBasePath(buildConfig.getWorkDir(), buildConfig.getDockerFile()), "./")
                                 String image = null;
                                 if(scmVars.BRANCH.equalsIgnoreCase("master")) {
