@@ -149,7 +149,10 @@ spec:
 
                                     echo "===== BUILD CONTEXT ====="
                                     ls -la ${buildConfig.getContext()}
-
+                                    echo "DOCKERFILE=${buildConfig.getDockerFile()}"
+                                    echo "CONTEXT=${buildConfig.getContext()}"
+                                    echo "WORKDIR=${workDir}"
+                                    echo "${buildConfig}"
                                     echo "===== MIGRATION DIR ====="
                                     ls -la ${buildConfig.getContext()}/migration
 
