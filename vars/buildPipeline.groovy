@@ -14,7 +14,7 @@ metadata:
 spec:
   containers:
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:debug-v0.15.0
+    image: gcr.io/kaniko-project/executor:v1.23.2-debug
     imagePullPolicy: IfNotPresent
     workingDir: /home/jenkins/agent
     command:
@@ -194,7 +194,6 @@ spec:
                                   --build-arg WORK_DIR=${workDir} \
                                   --build-arg token=\$GIT_ACCESS_TOKEN \
                                   --cache=true --cache-dir=/cache \
-                                  --single-snapshot=true \
                                   --snapshotMode=time \
                                   --destination=${image} \
                                   --no-push=${noPushImage} \
