@@ -16,6 +16,7 @@ spec:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:v1.23.2-debug
     imagePullPolicy: IfNotPresent
+    workingDir: /home/jenkins/agent
     command:
     - /busybox/cat
     tty: true
