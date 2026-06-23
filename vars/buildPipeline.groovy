@@ -218,6 +218,8 @@ spec:
                         build(
                             job: "deployments/deploy-to-qa",
                             wait: false,
+                            echo "Images=${env.Images}"
+                            echo "IMAGES=${env.IMAGES}"
                             parameters: [
                                 string(
                                     name: "IMAGES",
