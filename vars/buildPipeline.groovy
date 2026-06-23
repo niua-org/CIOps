@@ -207,27 +207,29 @@ spec:
                               // echo "WANNA_DEPLOY = ${env.WANNA_DEPLOY}"
                               }                              
                             }
-                         if(env.WANNA_DEPLOY?.toBoolean()) {
-                            echo "IMAGE TO DEPLOY = ${builtImage}"
-                          }
                         }
                     }
                 }
-                // stage('Deploy') {
-                //   if(env.WANNA_DEPLOY?.toBoolean()) {
-                //     echo "Deploying image: ${image}"
-                //     build(
-                //         job: "deployments/deploy-to-qa",
-                //         wait: false,
-                //         parameters: [
-                //           string(
-                //             name: "IMAGE_TAG",
-                //             value: builtImage
-                //           )
-                //         ]
-                //       )
-                //   }
-                // }
+                stage('Deploy') {
+                   if(env.WANNA_DEPLOY?.toBoolean()) {
+                        if(!builtImage?.trim()) {
+                            error("WANNA_DEPLOY=true but builtImage is empty")
+                        }
+                        echo "Deploying image: ${builtImage}"
+                        build(
+                            job: "deployments/deploy-to-qa",
+                            wait: false,
+                            parameters: [
+                                string(
+                                    name: "IMAGE_TAG",
+                                    value: builtImage
+                                )
+                            ]
+                        )
+                    } else {
+                        echo "Deployment skipped. WANNA_DEPLOY was not selected."
+                    }
+                }
                 // stage ("Update dashboard") {
                 //         environmentDashboard {
                 //             environmentName(scmVars.BRANCH)  
