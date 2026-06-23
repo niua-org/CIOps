@@ -130,8 +130,8 @@ spec:
                                     --custom-platform=linux/amd64 \
                                     --build-arg token=\$GIT_ACCESS_TOKEN \
                                     --cache=true --cache-dir=/cache \
-                                    --single-snapshot=true \
-                                    --snapshotMode=time \
+                                    --single-snapshot=false \
+                                    --snapshotMode=redo \
                                     --destination=${image} \
                                     --destination=${gcr_image} \
                                     --no-push=${noPushImage} \
@@ -196,7 +196,8 @@ spec:
                                   --custom-platform=linux/amd64 \
                                   --build-arg token=\$GIT_ACCESS_TOKEN \
                                   --cache=true --cache-dir=/cache \
-                                  --snapshotMode=time \
+                                  --single-snapshot=false \
+                                  --snapshotMode=redo \
                                   --destination=${image} \
                                   --no-push=${noPushImage} \
                               """
