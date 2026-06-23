@@ -220,7 +220,7 @@ spec:
                             wait: false,
                             parameters: [
                                 string(
-                                    name: "IMAGE_TAG",
+                                    name: "IMAGES",
                                     value: builtImage
                                 )
                             ]
