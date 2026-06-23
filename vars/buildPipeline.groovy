@@ -104,6 +104,7 @@ spec:
                     withEnv(["PATH=/busybox:/kaniko:$PATH"
                     ]) {
                         container(name: 'kaniko', shell: '/busybox/sh') {
+                            String builtImage = null
                             for(int j=0; j<jobConfig.getBuildConfigs().size(); j++){
                                 BuildConfig buildConfig = jobConfig.getBuildConfigs().get(j)
                                 echo "${buildConfig.getWorkDir()} ${buildConfig.getDockerFile()}"
@@ -116,7 +117,8 @@ spec:
                                   image = "${REPO_NAME}/${buildConfig.getImageName()}:v${scmVars.VERSION}-${scmVars.ACTUAL_COMMIT}-${env.BUILD_NUMBER}";
                                 } else {
                                   image = "${REPO_NAME}/${buildConfig.getImageName()}:${scmVars.BRANCH}-${scmVars.ACTUAL_COMMIT}-${env.BUILD_NUMBER}";
-                                } 
+                                }
+                                builtImage = image 
                                 serviceCategory = buildConfig.getServiceCategoryName();  // Dashboard
                                 buildNum = "${scmVars.VERSION}"; // Dashboard
                                 String noPushImage = env.NO_PUSH ? env.NO_PUSH : false;
@@ -205,9 +207,27 @@ spec:
                               // echo "WANNA_DEPLOY = ${env.WANNA_DEPLOY}"
                               }                              
                             }
+                         if(env.WANNA_DEPLOY?.toBoolean()) {
+                            echo "IMAGE TO DEPLOY = ${builtImage}"
+                          }
                         }
                     }
                 }
+                // stage('Deploy') {
+                //   if(env.WANNA_DEPLOY?.toBoolean()) {
+                //     echo "Deploying image: ${image}"
+                //     build(
+                //         job: "deployments/deploy-to-qa",
+                //         wait: false,
+                //         parameters: [
+                //           string(
+                //             name: "IMAGE_TAG",
+                //             value: builtImage
+                //           )
+                //         ]
+                //       )
+                //   }
+                // }
                 // stage ("Update dashboard") {
                 //         environmentDashboard {
                 //             environmentName(scmVars.BRANCH)  
