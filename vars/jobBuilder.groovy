@@ -102,6 +102,7 @@ spec:
                         listSize('5')                 
                 }
                   booleanParam('ALT_REPO_PUSH', false, 'Check to push images to GCR')
+                  booleanParam('WANNA_DEPLOY', true, 'Trigger deployment after successful build')
             }
                 definition {
                     cpsScm {

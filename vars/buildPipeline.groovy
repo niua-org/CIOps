@@ -202,6 +202,7 @@ spec:
                                   --no-push=${noPushImage} \
                               """
                               echo "${image} pushed successfully!"
+                              // echo "WANNA_DEPLOY = ${env.WANNA_DEPLOY}"
                               }                              
                             }
                         }
