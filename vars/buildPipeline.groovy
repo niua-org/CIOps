@@ -197,7 +197,6 @@ spec:
                                   --snapshotMode=time \
                                   --destination=${image} \
                                   --no-push=${noPushImage} \
-                                  --cache-repo=nudmcdg/cache/cache
                               """
                               echo "${image} pushed successfully!"
                               }                              
