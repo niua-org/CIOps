@@ -223,7 +223,7 @@ spec:
                         wait: false,
                         parameters: [
                             string(
-                            name: "IMAGES",
+                            name: "Images",
                             value: builtImage
                             )
                         ]
