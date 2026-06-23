@@ -14,7 +14,7 @@ metadata:
 spec:
   containers:
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:v1.23.2-debug
+    image: gcr.io/kaniko-project/executor:v1.17.0-debug
     imagePullPolicy: IfNotPresent
     workingDir: /home/jenkins/agent
     command:
