@@ -210,27 +210,29 @@ spec:
                     }
                 }
                 stage('Deploy') {
-                   if(env.WANNA_DEPLOY?.toBoolean()) {
-                        if(!builtImage?.trim()) {
-                            error("WANNA_DEPLOY=true but builtImage is empty")
-                        }
-                        echo "Deploying image: ${builtImage}"
-                        build(
-                            job: "deployments/deploy-to-qa",
-                            wait: false,
-                            echo "Images=${env.Images}"
-                            echo "IMAGES=${env.IMAGES}"
-                            parameters: [
-                                string(
-                                    name: "IMAGES",
-                                    value: builtImage
-                                )
-                            ]
-                        )
-                    } else {
-                        echo "Deployment skipped. WANNA_DEPLOY was not selected."
+                if(env.WANNA_DEPLOY?.toBoolean()) {
+
+                  if(!builtImage?.trim()) {
+                        error("WANNA_DEPLOY=true but builtImage is empty")
                     }
-                }
+
+                    echo "Deploying image: ${builtImage}"
+
+                    build(
+                        job: "deployments/deploy-to-qa",
+                        wait: false,
+                        parameters: [
+                            string(
+                            name: "IMAGES",
+                            value: builtImage
+                            )
+                        ]
+                    )
+
+                } else {
+                echo "Deployment skipped. WANNA_DEPLOY was not selected."
+            }
+        }
                 // stage ("Update dashboard") {
                 //         environmentDashboard {
                 //             environmentName(scmVars.BRANCH)  
