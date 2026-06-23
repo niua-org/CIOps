@@ -127,6 +127,7 @@ spec:
                                     echo \"Attempting to build image,  ${image}\"
                                     /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
                                     --build-arg WORK_DIR=${workDir} \
+                                    --custom-platform=linux/amd64 \
                                     --build-arg token=\$GIT_ACCESS_TOKEN \
                                     --cache=true --cache-dir=/cache \
                                     --single-snapshot=true \
@@ -192,6 +193,7 @@ spec:
                                   echo \"Attempting to build image,  ${image}\"
                                   /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
                                   --build-arg WORK_DIR=${workDir} \
+                                  --custom-platform=linux/amd64 \
                                   --build-arg token=\$GIT_ACCESS_TOKEN \
                                   --cache=true --cache-dir=/cache \
                                   --snapshotMode=time \
