@@ -99,12 +99,11 @@ spec:
                         }
                     }
                 }
-
+                String builtImage = null
                 stage('Build with Kaniko') {
                     withEnv(["PATH=/busybox:/kaniko:$PATH"
                     ]) {
                         container(name: 'kaniko', shell: '/busybox/sh') {
-                            String builtImage = null
                             for(int j=0; j<jobConfig.getBuildConfigs().size(); j++){
                                 BuildConfig buildConfig = jobConfig.getBuildConfigs().get(j)
                                 echo "${buildConfig.getWorkDir()} ${buildConfig.getDockerFile()}"
