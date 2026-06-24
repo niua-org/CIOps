@@ -123,6 +123,44 @@ spec:
             }
 """);
         }
+
+            String gitUrlForRouter = entry.getKey();
+            String routerToken = Utils.getDirName(gitUrlForRouter);
+            jobDslScript.append("""
+            pipelineJob("Router") {
+                logRotator(-1, 5, -1, -1)
+                triggers {
+                    genericTrigger {
+                        genericVariables {
+                            genericVariable {
+                                key("REF")
+                                value("\$.ref")
+                            }
+                            genericVariable {
+                                key("BEFORE")
+                                value("\$.before")
+                            }
+                            genericVariable {
+                                key("AFTER")
+                                value("\$.after")
+                            }
+                        }
+                        token("${routerToken}")
+                        printContributedVariables(true)
+                        printPostContent(true)
+                        silentResponse(false)
+                    }
+                }
+                definition {
+                    cps {
+                        script(\"\"\"
+                        library 'ci-libs'
+                        routerJob(gitUrl: '${gitUrlForRouter}', credentialsId: 'git_read', configFile: 'build/build-config.yml')
+                        \"\"\")
+                    }
+                }
+            }
+""");
         }
 
         stage('Building jobs') {
