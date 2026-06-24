@@ -38,23 +38,30 @@ spec:
                 String before = env.BEFORE ?: ''
                 String after = env.AFTER ?: ''
 
-                if (!ref || !after) {
-                    error "Router job triggered without webhook payload (REF/AFTER missing). " +
-                          "Please configure a GitHub webhook pointing to " +
-                          "<jenkins>/generic-webhook-trigger/invoke?token=UPYOG-NIUA-Vikash"
+                boolean isManualTrigger = !ref || !after
+                if (isManualTrigger) {
+                    echo "WARNING: Triggered manually — no webhook payload received."
+                    echo "Set up a GitHub webhook → <jenkins>/generic-webhook-trigger/invoke?token=UPYOG-NIUA-Vikash"
+                    echo "Falling back to latest master branch for this run."
                 }
 
-                String branch = ref.replace('refs/heads/', '').replace('refs/tags/', '')
-                echo "Webhook event: ref=${ref}, branch=${branch}, after=${after}"
+                String branch = isManualTrigger ? 'master' :
+                    ref.replace('refs/heads/', '').replace('refs/tags/', '')
+                String targetCommit = isManualTrigger ? '' : after
+                echo "Branch: ${branch}, commit: ${targetCommit ?: 'latest master'}"
 
-                stage('Checkout at Triggered Commit') {
+                stage('Checkout') {
                     dir('repo') {
-                        checkout changelog: false, poll: false,
-                            scm: [
-                                $class: 'GitSCM',
-                                branches: [[name: after]],
-                                userRemoteConfigs: [[url: gitUrl, credentialsId: credentialsId]]
-                            ]
+                        if (targetCommit) {
+                            checkout changelog: false, poll: false,
+                                scm: [
+                                    $class: 'GitSCM',
+                                    branches: [[name: targetCommit]],
+                                    userRemoteConfigs: [[url: gitUrl, credentialsId: credentialsId]]
+                                ]
+                        } else {
+                            git url: gitUrl, credentialsId: credentialsId, branch: '*/master'
+                        }
                     }
                 }
 
@@ -77,8 +84,9 @@ spec:
                                 ).trim()
                             }
                         } else {
-                            echo "New branch or first push — no 'before' commit to compare."
-                            echo "Checking files changed in this single commit..."
+                            echo isManualTrigger ?
+                                "Manual trigger — checking files changed in last commit..." :
+                                "New branch or first push — no 'before' commit to compare."
                             try {
                                 changedFiles = sh(
                                     script: 'git diff --name-only HEAD~1..HEAD',
