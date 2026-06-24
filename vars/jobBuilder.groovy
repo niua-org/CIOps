@@ -134,15 +134,15 @@ spec:
                         genericVariables {
                             genericVariable {
                                 key("REF")
-                                value("\$.ref")
+                                value('\$.ref')
                             }
                             genericVariable {
                                 key("BEFORE")
-                                value("\$.before")
+                                value('\$.before')
                             }
                             genericVariable {
                                 key("AFTER")
-                                value("\$.after")
+                                value('\$.after')
                             }
                         }
                         token("${routerToken}")
