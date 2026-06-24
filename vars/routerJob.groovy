@@ -16,7 +16,7 @@ metadata:
 spec:
   containers:
   - name: git
-    image: docker.io/egovio/builder:2-64da60a1
+    image: docker.io/egovio/builder:2-64da60a1-version_script_update-NA
     imagePullPolicy: IfNotPresent
     command:
     - cat
