@@ -38,30 +38,28 @@ spec:
                 String before = env.BEFORE ?: ''
                 String after = env.AFTER ?: ''
 
-                boolean isManualTrigger = !ref || !after
-                if (isManualTrigger) {
-                    echo "WARNING: Triggered manually — no webhook payload received."
-                    echo "Set up a GitHub webhook → <jenkins>/generic-webhook-trigger/invoke?token=UPYOG-NIUA-Vikash"
-                    echo "Falling back to latest master branch for this run."
+                if (!ref || !after) {
+                    error "This pipeline is designed to run via webhook trigger only.\n" +
+                          "Please configure a GitHub webhook pointing to:\n" +
+                          "  <jenkins>/generic-webhook-trigger/invoke?token=UPYOG-NIUA-Vikash"
                 }
 
-                String branch = isManualTrigger ? 'master' :
-                    ref.replace('refs/heads/', '').replace('refs/tags/', '')
-                String targetCommit = isManualTrigger ? '' : after
-                echo "Branch: ${branch}, commit: ${targetCommit ?: 'latest master'}"
+                // Format for gitParameter which expects 'origin/branch-name' (not 'refs/heads/branch-name')
+                String gitParamBranch = ref.startsWith('refs/tags/')
+                    ? ref.replace('refs/tags/', '')
+                    : "origin/${ref.replace('refs/heads/', '')}"
 
-                stage('Checkout') {
+                String branch = gitParamBranch.replace('origin/', '')
+                echo "Webhook: ref=${ref}, branch=${branch}, after=${after}"
+
+                stage('Checkout at Triggered Commit') {
                     dir('repo') {
-                        if (targetCommit) {
-                            checkout changelog: false, poll: false,
-                                scm: [
-                                    $class: 'GitSCM',
-                                    branches: [[name: targetCommit]],
-                                    userRemoteConfigs: [[url: gitUrl, credentialsId: credentialsId]]
-                                ]
-                        } else {
-                            git url: gitUrl, credentialsId: credentialsId, branch: 'master'
-                        }
+                        checkout changelog: false, poll: false,
+                            scm: [
+                                $class: 'GitSCM',
+                                branches: [[name: after]],
+                                userRemoteConfigs: [[url: gitUrl, credentialsId: credentialsId]]
+                            ]
                     }
                 }
 
@@ -84,9 +82,7 @@ spec:
                                 ).trim()
                             }
                         } else {
-                            echo isManualTrigger ?
-                                "Manual trigger — checking files changed in last commit..." :
-                                "New branch or first push — no 'before' commit to compare."
+                            echo "New branch or first push — no 'before' commit to compare. Checking last commit..."
                             try {
                                 changedFiles = sh(
                                     script: 'git diff --name-only HEAD~1..HEAD',
@@ -147,13 +143,13 @@ spec:
                 stage('Trigger Jobs') {
                     if (env.JOBS_TO_TRIGGER?.trim()) {
                         List<String> jobs = env.JOBS_TO_TRIGGER.split(',')
-                        echo "Triggering ${jobs.size()} job(s) on branch '${branch}'"
+                        echo "Triggering ${jobs.size()} job(s) on '${gitParamBranch}'"
                         for (String jobName : jobs) {
                             echo "  → ${jobName}"
                             build job: jobName,
                                 wait: false,
                                 parameters: [
-                                    string(name: 'BRANCH', value: branch),
+                                    string(name: 'BRANCH', value: gitParamBranch),
                                     booleanParam(name: 'ALT_REPO_PUSH', value: false),
                                     booleanParam(name: 'WANNA_DEPLOY', value: false)
                                 ]
