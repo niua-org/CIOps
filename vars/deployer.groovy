@@ -38,8 +38,10 @@ spec:
             // Adding the "Export Kubeconfig Secret" stage
             stage('Export Kubeconfig Secret') {
                 container(name: 'egov-deployer', shell: '/bin/sh') {
-                    echo "Images=${env.Images}"
-                    echo "IMAGES=${env.IMAGES}"
+                    echo "params.Images=${params.Images}"
+                    echo "params.IMAGES=${params.IMAGES}"
+                    echo "env.Images=${env.Images}"
+                    echo "env.IMAGES=${env.IMAGES}"
                     sh """
                         # Create the .kube directory
                         #mkdir -p kube
