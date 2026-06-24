@@ -117,6 +117,7 @@ spec:
                         echo "Loaded ${jobConfigs.size()} job configs from build-config.yml"
 
                         Set<String> matchingJobNames = new LinkedHashSet<>()
+                        Set<String> matchedFiles = new HashSet<>()
                         for (JobConfig jobConfig : jobConfigs) {
                             String jobName = jobConfig.getName()
                             for (BuildConfig buildConfig : jobConfig.getBuildConfigs()) {
@@ -128,6 +129,7 @@ spec:
                                         changedFile.startsWith(context) ||
                                         changedFile.startsWith(dockerFile)) {
                                         matchingJobNames.add(jobName)
+                                        matchedFiles.add(changedFile)
                                         echo "  Match: ${changedFile} → ${jobName}"
                                         break
                                     }
@@ -135,8 +137,31 @@ spec:
                             }
                         }
 
+                        def unmatchedFiles = fileChanges.findAll {
+                            !matchedFiles.contains(it)
+                        }
+
+                        if (matchingJobNames.isEmpty()) {
+                            error """
+                                No Jenkins job mapping found for changed files:
+
+                                ${unmatchedFiles.join('\n')}
+
+                                Changes are not inside any configured service folder.
+                            """
+                        }
+
                         env.JOBS_TO_TRIGGER = matchingJobNames.join(',')
-                        echo "Matching jobs (${matchingJobNames.size()}): ${env.JOBS_TO_TRIGGER ?: '(none)'}"
+
+                        echo "Matching jobs (${matchingJobNames.size()}): ${env.JOBS_TO_TRIGGER}"
+
+                        if (unmatchedFiles) {
+                            echo """
+                                Ignoring non-service files:
+
+                                ${unmatchedFiles.join('\n')}
+                            """
+                        }
                     }
                 }
 
