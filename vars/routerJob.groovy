@@ -121,13 +121,18 @@ spec:
                         for (JobConfig jobConfig : jobConfigs) {
                             String jobName = jobConfig.getName()
                             for (BuildConfig buildConfig : jobConfig.getBuildConfigs()) {
+                                echo """
+                                    JOB=${jobName}
+                                    WORKDIR=${buildConfig.getWorkDir()}
+                                    CONTEXT=${buildConfig.getContext()}
+                                    DOCKERFILE=${buildConfig.getDockerFile()}
+                                """
                                 String workDir = buildConfig.getWorkDir()
                                 String context = buildConfig.getContext().replaceAll('^\\./', '')
                                 String dockerFile = buildConfig.getDockerFile()
                                 for (String changedFile : fileChanges) {
-                                    if (changedFile.startsWith(workDir) ||
-                                        changedFile.startsWith(context) ||
-                                        changedFile.startsWith(dockerFile)) {
+                                    if (changedFile.startsWith(workDir + "/") ||
+                                        changedFile == workDir) {
                                         matchingJobNames.add(jobName)
                                         matchedFiles.add(changedFile)
                                         echo "  Match: ${changedFile} → ${jobName}"
