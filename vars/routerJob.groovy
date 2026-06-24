@@ -60,7 +60,7 @@ spec:
                                     userRemoteConfigs: [[url: gitUrl, credentialsId: credentialsId]]
                                 ]
                         } else {
-                            git url: gitUrl, credentialsId: credentialsId, branch: '*/master'
+                            git url: gitUrl, credentialsId: credentialsId, branch: 'master'
                         }
                     }
                 }
