@@ -61,12 +61,19 @@ spec:
           
            // git url: pipelineParams.repo, branch: pipelineParams.branch, credentialsId: 'git_read'
                 stage('Deploy Images') {
-                        container(name: 'egov-deployer', shell: '/bin/sh') {
+                       container(name: 'egov-deployer', shell: '/bin/sh') {
+                            echo "params.IMAGES=${params.IMAGES}"
+
                             sh """
-                                /opt/egov/egov-deployer deploy --helm-dir `pwd`/${pipelineParams.helmDir} -c=${env.CLUSTER_CONFIGS}  -e ${pipelineParams.environment} "${env.IMAGES}"
+                              /opt/egov/egov-deployer deploy \
+                             --helm-dir `pwd`/${pipelineParams.helmDir} \
+                             -c=${env.CLUSTER_CONFIGS} \
+                             -e ${pipelineParams.environment} \
+                              "${params.IMAGES}"
                             """
-                            }
+                    }
                 }
+            }
         }
     }
 
