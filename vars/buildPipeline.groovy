@@ -53,7 +53,7 @@ spec:
   - name: kaniko-cache
     persistentVolumeClaim:
       claimName: kaniko-cache-claim
-      readOnly: false        
+      readOnly: true        
   - name: jenkins-docker-cfg
     projected:
       sources:
