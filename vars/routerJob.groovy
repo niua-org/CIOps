@@ -17,7 +17,7 @@ def call(Map params) {
     }
 
     // Fixed downstream branch param — always niua-dev-2.0 regardless of trigger branch
-    final String DOWNSTREAM_BRANCH = 'niua-dev-2.0'
+    final String DOWNSTREAM_BRANCH = 'origin/niua-dev-2.0'
 
     podTemplate(yaml: """
 kind: Pod
