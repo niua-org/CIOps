@@ -136,6 +136,7 @@ spec:
                                     --destination=${image} \
                                     --destination=${gcr_image} \
                                     --no-push=${noPushImage} \
+                                    --cache=true --cache-dir=/cache \
                                     --cache-repo=nudmcdg/cache/cache
                                   """  
                                   echo "${image} and ${gcr_image} pushed successfully!!"                              
