@@ -172,7 +172,7 @@ def call(Map params) {
                         parameters: [
                             string(name: 'BRANCH', value: DOWNSTREAM_BRANCH),
                             booleanParam(name: 'ALT_REPO_PUSH', value: false),
-                            booleanParam(name: 'WANNA_DEPLOY', value: false)
+                            booleanParam(name: 'WANNA_DEPLOY', value: true)
                         ]
                 }
             } else {
