@@ -7,7 +7,9 @@ import static org.egov.jenkins.ConfigParser.getCommonBasePath
 library 'ci-libs'
 
 def call(Map pipelineParams) {
-    podTemplate(yaml: """
+    podTemplate(
+instanceCap: 2,
+yaml: """
 kind: Pod
 metadata:
   name: kaniko
