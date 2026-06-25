@@ -53,7 +53,7 @@ spec:
   - name: kaniko-cache
     persistentVolumeClaim:
       claimName: kaniko-cache-claim
-      readOnly: true        
+      readOnly: false        
   - name: jenkins-docker-cfg
     projected:
       sources:
@@ -136,8 +136,7 @@ spec:
                                     --destination=${image} \
                                     --destination=${gcr_image} \
                                     --no-push=${noPushImage} \
-                                    --cache=true --cache-dir=/cache \
-                                    --cache-repo=nudmcdg/cache/cache
+                                    --cache=true --cache-dir=/cache 
                                   """  
                                   echo "${image} and ${gcr_image} pushed successfully!!"                              
                                 }
