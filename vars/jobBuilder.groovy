@@ -144,6 +144,18 @@ spec:
                                 key("AFTER")
                                 value('\$.after')
                             }
+                            genericVariable {
+                                key("ADDED_FILES")
+                                value('\$.commits[*].added')
+                            }
+                            genericVariable {
+                                key("MODIFIED_FILES")
+                                value('\$.commits[*].modified')
+                            }
+                            genericVariable {
+                                key("REMOVED_FILES")
+                                value('\$.commits[*].removed')
+                            }
                         }
                         token("${routerToken}")
                         printContributedVariables(true)
@@ -155,7 +167,13 @@ spec:
                     cps {
                         script(\"\"\"
                         library 'ci-libs'
-                        routerJob(gitUrl: '${gitUrlForRouter}', credentialsId: 'git_read', configFile: 'build/build-config.yml')
+                        routerJob(
+                            gitUrl: '${gitUrlForRouter}',
+                            credentialsId: 'git_read',
+                            apiCredentialsId: 'git_read_token',
+                            configFile: 'build/build-config.yml',
+                            agentLabel: 'built-in'
+                        )
                         \"\"\")
                     }
                 }
