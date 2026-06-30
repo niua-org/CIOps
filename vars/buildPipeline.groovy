@@ -7,9 +7,7 @@ import static org.egov.jenkins.ConfigParser.getCommonBasePath
 library 'ci-libs'
 
 def call(Map pipelineParams) {
-    podTemplate(
-instanceCap: 2,
-yaml: """
+    podTemplate(yaml: """
 kind: Pod
 metadata:
   name: kaniko
@@ -138,7 +136,7 @@ spec:
                                     --destination=${image} \
                                     --destination=${gcr_image} \
                                     --no-push=${noPushImage} \
-                                    --cache=true --cache-dir=/cache 
+                                    --cache-repo=nudmcdg/cache/cache
                                   """  
                                   echo "${image} and ${gcr_image} pushed successfully!!"                              
                                 }
