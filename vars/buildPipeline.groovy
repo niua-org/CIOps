@@ -14,8 +14,9 @@ metadata:
 spec:
   containers:
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:debug-v0.15.0
+    image: gcr.io/kaniko-project/executor:v1.17.0-debug
     imagePullPolicy: IfNotPresent
+    workingDir: /home/jenkins/agent
     command:
     - /busybox/cat
     tty: true
@@ -32,7 +33,7 @@ spec:
             key: gitReadAccessToken                                     
     volumeMounts:
       - name: jenkins-docker-cfg
-        mountPath: /root/.docker
+        mountPath: /kaniko/.docker
       - name: kaniko-cache
         mountPath: /cache            
     resources:
@@ -98,12 +99,11 @@ spec:
                         }
                     }
                 }
-
+                String builtImage = null
                 stage('Build with Kaniko') {
                     withEnv(["PATH=/busybox:/kaniko:$PATH"
                     ]) {
                         container(name: 'kaniko', shell: '/busybox/sh') {
-
                             for(int j=0; j<jobConfig.getBuildConfigs().size(); j++){
                                 BuildConfig buildConfig = jobConfig.getBuildConfigs().get(j)
                                 echo "${buildConfig.getWorkDir()} ${buildConfig.getDockerFile()}"
@@ -116,7 +116,8 @@ spec:
                                   image = "${REPO_NAME}/${buildConfig.getImageName()}:v${scmVars.VERSION}-${scmVars.ACTUAL_COMMIT}-${env.BUILD_NUMBER}";
                                 } else {
                                   image = "${REPO_NAME}/${buildConfig.getImageName()}:${scmVars.BRANCH}-${scmVars.ACTUAL_COMMIT}-${env.BUILD_NUMBER}";
-                                } 
+                                }
+                                builtImage = image 
                                 serviceCategory = buildConfig.getServiceCategoryName();  // Dashboard
                                 buildNum = "${scmVars.VERSION}"; // Dashboard
                                 String noPushImage = env.NO_PUSH ? env.NO_PUSH : false;
@@ -127,10 +128,11 @@ spec:
                                     echo \"Attempting to build image,  ${image}\"
                                     /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
                                     --build-arg WORK_DIR=${workDir} \
+                                    --custom-platform=linux/amd64 \
                                     --build-arg token=\$GIT_ACCESS_TOKEN \
                                     --cache=true --cache-dir=/cache \
-                                    --single-snapshot=true \
-                                    --snapshotMode=time \
+                                    --single-snapshot=false \
+                                    --snapshotMode=redo \
                                     --destination=${image} \
                                     --destination=${gcr_image} \
                                     --no-push=${noPushImage} \
@@ -138,25 +140,99 @@ spec:
                                   """  
                                   echo "${image} and ${gcr_image} pushed successfully!!"                              
                                 }
+                                // else{
+                                // sh """
+                                //     echo "===== DEBUG START ====="
+                                //     echo "PWD"
+                                //     pwd
+                                //     echo "===== CURRENT DIR ====="
+                                //     ls -la
+                                //     echo "===== BUILD CONTEXT ====="
+                                //     ls -la ${buildConfig.getContext()}
+                                //     echo "DOCKERFILE=${buildConfig.getDockerFile()}"
+                                //     echo "CONTEXT=${buildConfig.getContext()}"
+                                //     echo "WORKDIR=${workDir}"
+                                //     echo "${buildConfig}"
+                                //     echo "===== MIGRATION DIR ====="
+                                //     ls -la ${buildConfig.getContext()}/migration
+                                //     echo "===== MIGRATION MAIN ====="
+                                //     ls -la ${buildConfig.getContext()}/migration/main
+                                //     echo "===== MIGRATE SH ====="
+                                //     ls -la ${buildConfig.getContext()}/migrate.sh
+                                //     echo "===== DOCKERFILE ====="
+                                //     cat ${buildConfig.getDockerFile()}
+                                //     echo "===== DEBUG END ====="
+                                // """
+                                // sh """
+                                //     echo \"Attempting to build image,  ${image}\"
+                                //     /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
+                                //     --build-arg WORK_DIR=${workDir} \
+                                //     --build-arg token=\$GIT_ACCESS_TOKEN \
+                                //     --cache=true --cache-dir=/cache \
+                                //     --single-snapshot=true \
+                                //     --snapshotMode=time \
+                                //     --destination=${image} \
+                                //     --no-push=${noPushImage} \
+                                //     --cache-repo=nudmcdg/cache/cache
+                                // """
+                                // echo "${image} pushed successfully!"
+                                // }  
                                 else{
-                                sh """
-                                    echo \"Attempting to build image,  ${image}\"
-                                    /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
-                                    --build-arg WORK_DIR=${workDir} \
-                                    --build-arg token=\$GIT_ACCESS_TOKEN \
-                                    --cache=true --cache-dir=/cache \
-                                    --single-snapshot=true \
-                                    --snapshotMode=time \
-                                    --destination=${image} \
-                                    --no-push=${noPushImage} \
-                                    --cache-repo=nudmcdg/cache/cache
-                                """
-                                echo "${image} pushed successfully!"
-                                }                                
+                                  sh """
+                                  echo "===== FILE CHECK ====="
+                                  echo "CONTEXT = ${buildConfig.getContext()}"
+                                  find ${buildConfig.getContext()} -type f | grep migrate.sh || true
+                                  find ${buildConfig.getContext()} -type d | grep migration || true
+                                  echo "===== MIGRATE.SH ====="
+                                  ls -la ${buildConfig.getContext()}/migrate.sh || true
+                                  echo "===== MIGRATION MAIN ====="
+                                  ls -la ${buildConfig.getContext()}/migration/main || true
+                                  echo "===== DOCKERFILE ====="
+                                  cat ${buildConfig.getDockerFile()}
+                              """
+                              sh """
+                                  echo \"Attempting to build image,  ${image}\"
+                                  /kaniko/executor -f `pwd`/${buildConfig.getDockerFile()} -c `pwd`/${buildConfig.getContext()} \
+                                  --build-arg WORK_DIR=${workDir} \
+                                  --custom-platform=linux/amd64 \
+                                  --build-arg token=\$GIT_ACCESS_TOKEN \
+                                  --cache=true --cache-dir=/cache \
+                                  --single-snapshot=false \
+                                  --snapshotMode=redo \
+                                  --destination=${image} \
+                                  --no-push=${noPushImage} \
+                              """
+                              echo "${image} pushed successfully!"
+                              // echo "WANNA_DEPLOY = ${env.WANNA_DEPLOY}"
+                              }                              
                             }
                         }
                     }
                 }
+                stage('Deploy') {
+                if(env.WANNA_DEPLOY?.toBoolean()) {
+
+                  if(!builtImage?.trim()) {
+                        error("WANNA_DEPLOY=true but builtImage is empty")
+                    }
+
+                    echo "Deploying image: ${builtImage}"
+
+                    build(
+                        job: "deployments/deploy-to-qa",
+                        wait: false,
+                        parameters: [
+                            string(
+                            name: "Images",
+                            value: builtImage
+                            )
+                        ]
+                    )
+
+                } else {
+                echo "Deployment skipped. WANNA_DEPLOY was not selected."
+            }
+        }
                 // stage ("Update dashboard") {
                 //         environmentDashboard {
                 //             environmentName(scmVars.BRANCH)  

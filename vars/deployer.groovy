@@ -38,6 +38,10 @@ spec:
             // Adding the "Export Kubeconfig Secret" stage
             stage('Export Kubeconfig Secret') {
                 container(name: 'egov-deployer', shell: '/bin/sh') {
+                    echo "params.Images=${params.Images}"
+                    echo "params.IMAGES=${params.IMAGES}"
+                    echo "env.Images=${env.Images}"
+                    echo "env.IMAGES=${env.IMAGES}"
                     sh """
                         # Create the .kube directory
                         #mkdir -p kube
@@ -54,18 +58,22 @@ spec:
                         pwd && ls -la config-as-code/helm/charts
                     """
                 }
+            }
           
-           // git url: pipelineParams.repo, branch: pipelineParams.branch, credentialsId: 'git_read'
-                stage('Deploy Images') {
-                        container(name: 'egov-deployer', shell: '/bin/sh') {
-                            sh """
-                                /opt/egov/egov-deployer deploy --helm-dir `pwd`/${pipelineParams.helmDir} -c=${env.CLUSTER_CONFIGS}  -e ${pipelineParams.environment} "${env.IMAGES}"
-                            """
-                            }
+            // git url: pipelineParams.repo, branch: pipelineParams.branch, credentialsId: 'git_read'
+            stage('Deploy Images') {
+                container(name: 'egov-deployer', shell: '/bin/sh') {
+                    echo "params.IMAGES=${params.Images}"
+
+                    sh """
+                       /opt/egov/egov-deployer deploy \
+                       --helm-dir `pwd`/${pipelineParams.helmDir} \
+                       -c=${env.CLUSTER_CONFIGS} \
+                       -e ${pipelineParams.environment} \
+                       "${params.Images}"
+                    """
                 }
+            }
         }
     }
-
-
-}
 }

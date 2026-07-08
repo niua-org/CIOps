@@ -102,6 +102,7 @@ spec:
                         listSize('5')                 
                 }
                   booleanParam('ALT_REPO_PUSH', false, 'Check to push images to GCR')
+                  booleanParam('WANNA_DEPLOY', true, 'Trigger deployment after successful build')
             }
                 definition {
                     cpsScm {
@@ -122,11 +123,84 @@ spec:
             }
 """);
         }
+
+            String gitUrlForRouter = entry.getKey();
+            String routerToken = Utils.getDirName(gitUrlForRouter);
+            jobDslScript.append("""
+            pipelineJob("Router") {
+                logRotator(-1, 5, -1, -1)
+                triggers {
+                    genericTrigger {
+                        genericVariables {
+                            genericVariable {
+                                key("REF")
+                                value('\$.ref')
+                            }
+                            genericVariable {
+                                key("BEFORE")
+                                value('\$.before')
+                            }
+                            genericVariable {
+                                key("AFTER")
+                                value('\$.after')
+                            }
+                            genericVariable {
+                                key("ADDED_FILES")
+                                value('\$.commits[*].added')
+                            }
+                            genericVariable {
+                                key("MODIFIED_FILES")
+                                value('\$.commits[*].modified')
+                            }
+                            genericVariable {
+                                key("REMOVED_FILES")
+                                value('\$.commits[*].removed')
+                            }
+                        }
+                        token("${routerToken}")
+                        printContributedVariables(true)
+                        printPostContent(true)
+                        silentResponse(false)
+                    }
+                }
+                definition {
+                    cps {
+                        script(\"\"\"
+                        library 'ci-libs'
+                        routerJob(
+                            gitUrl: '${gitUrlForRouter}',
+                            credentialsId: 'git_read',
+                            apiCredentialsId: 'git_read_token',
+                            configFile: 'build/build-config.yml',
+                            agentLabel: 'built-in'
+                        )
+                        \"\"\")
+                    }
+                }
+            }
+""");
         }
 
         stage('Building jobs') {
-           jobDsl scriptText: jobDslScript.toString()
-        }
+
+    echo "===== GENERATED DSL START ====="
+    echo jobDslScript.toString()
+    echo "===== GENERATED DSL END ====="
+
+    writeFile(
+        file: 'generated.dsl',
+        text: jobDslScript.toString()
+    )
+
+    sh 'ls -ltr'
+    sh 'wc -l generated.dsl'
+
+    jobDsl(
+        targets: 'generated.dsl',
+        removedJobAction: 'IGNORE',
+        removedViewAction: 'IGNORE'
+    )
+}
 
         stage('Creating Repositories in DockerHub') {
                     withEnv(["REPO_LIST=${repoList}"
