@@ -27,7 +27,7 @@ def call(Map params) {
             if (!ref || !after) {
                 error "This pipeline is designed to run via webhook trigger only.\n" +
                       "Please configure a GitHub webhook pointing to:\n" +
-                      "  <jenkins>/generic-webhook-trigger/invoke?token=UPYOG-NIUA-Vikash"
+                      "  <jenkins>/generic-webhook-trigger/invoke?token=${env.GITHUB_WEBHOOK_TOKEN}"
             }
 
             String branch = ref.replace('refs/heads/', '').replace('refs/tags/', '')
