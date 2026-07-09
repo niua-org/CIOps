@@ -126,6 +126,7 @@ spec:
 
             String gitUrlForRouter = entry.getKey();
             String routerToken = Utils.getDirName(gitUrlForRouter);
+            String webhookToken = System.getenv("GITHUB_WEBHOOK_TOKEN") ?: routerToken;
             jobDslScript.append("""
             pipelineJob("Router") {
                 logRotator(-1, 5, -1, -1)
@@ -157,7 +158,7 @@ spec:
                                 value('\$.commits[*].removed')
                             }
                         }
-                        token("${routerToken}")
+                        token("${webhookToken}")
                         printContributedVariables(true)
                         printPostContent(true)
                         silentResponse(false)
