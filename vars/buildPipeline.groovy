@@ -30,7 +30,12 @@ spec:
         valueFrom:
           secretKeyRef:
             name: jenkins-credentials
-            key: gitReadAccessToken                                     
+            key: gitReadAccessToken
+      - name: SLACK_WEBHOOK
+        valueFrom:
+          secretKeyRef:
+            name: jenkins-credentials
+            key: slackWebhook                                     
     volumeMounts:
       - name: jenkins-docker-cfg
         mountPath: /kaniko/.docker
@@ -38,10 +43,10 @@ spec:
         mountPath: /cache            
     resources:
       requests:
-        memory: "1792Mi"
+        memory: "3Gi"
         cpu: "750m"
       limits:
-        memory: "3954Mi"
+        memory: "6Gi"
         cpu: "1500m"      
   - name: git
     image: docker.io/egovio/builder:2-64da60a1-version_script_update-NA
@@ -100,7 +105,16 @@ spec:
                     }
                 }
                 String builtImage = null
-                stage('Build with Kaniko') {
+                String slackStage = ''
+                String slackImage = ''
+                String slackStatus = 'BUILD_PASSED'
+                String slackTimestamp = new Date().format("yyyy-MM-dd HH:mm:ss", TimeZone.getTimeZone("UTC"))
+                String commitMessage = scmVars.GIT_COMMIT ? scmVars.GIT_COMMIT.take(8) : ''
+
+                try {
+                    slackStage = 'Build with Kaniko'
+                    slackImage = builtImage ?: 'N/A'
+                    stage('Build with Kaniko') {
                     withEnv(["PATH=/busybox:/kaniko:$PATH"
                     ]) {
                         container(name: 'kaniko', shell: '/busybox/sh') {
@@ -209,6 +223,8 @@ spec:
                         }
                     }
                 }
+                slackImage = builtImage ?: 'N/A'
+                slackStage = 'Deploy'
                 stage('Deploy') {
                 if(env.WANNA_DEPLOY?.toBoolean()) {
 
@@ -217,10 +233,11 @@ spec:
                     }
 
                     echo "Deploying image: ${builtImage}"
+                    slackImage = builtImage
 
-                    build(
+                    def deployResult = build(
                         job: "deployments/deploy-to-qa",
-                        wait: false,
+                        wait: true,
                         parameters: [
                             string(
                             name: "Images",
@@ -228,11 +245,44 @@ spec:
                             )
                         ]
                     )
+                    
+                    slackStatus = 'FULL_SUCCESS'
 
                 } else {
                 echo "Deployment skipped. WANNA_DEPLOY was not selected."
+                slackStatus = 'DEPLOY_SKIPPED'
             }
         }
+
+                } catch (Exception slackErr) {
+                    slackImage = slackImage ?: 'N/A'
+                    def slackText = ''
+                    if (slackStage == 'Build with Kaniko') {
+                        slackText = "❌ *Build Failed*\nStage: `${slackStage}`\nImage: `N/A`\nCommit: `${commitMessage}`\nError: `${slackErr.message.take(300)}`\nTime: `${slackTimestamp} UTC`"
+                    } else if (slackStatus == 'BUILD_PASSED' && slackStage == 'Deploy') {
+                        slackText = "⚠️ *Build Passed, Deploy Failed*\nStage: `${slackStage}`\nImage: `${slackImage}`\nCommit: `${commitMessage}`\nError: `${slackErr.message.take(300)}`\nTime: `${slackTimestamp} UTC`"
+                    } else if (slackStatus == 'DEPLOY_SKIPPED') {
+                        slackText = "✅ *Build Successful (Deploy Skipped)*\nImage: `${slackImage}`\nCommit: `${commitMessage}`\nTime: `${slackTimestamp} UTC`"
+                    }
+                    container(name: 'kaniko', shell: '/busybox/sh') {
+                        sh "curl -s -X POST -H 'Content-type: application/json' --data '{"text": "${slackText}"}' \${SLACK_WEBHOOK} || true"
+                    }
+                    throw slackErr
+                }
+
+                // Send success alert
+                if (slackStatus == 'FULL_SUCCESS') {
+                    def slackText = "✅ *Build and Deploy Successful*\nImage: `${slackImage}`\nCommit: `${commitMessage}`\nTime: `${slackTimestamp} UTC`\nJob: ${env.BUILD_URL}"
+                    container(name: 'kaniko', shell: '/busybox/sh') {
+                        sh "curl -s -X POST -H 'Content-type: application/json' --data '{"text": "${slackText}"}' \${SLACK_WEBHOOK} || true"
+                    }
+                } else if (slackStatus == 'DEPLOY_SKIPPED') {
+                    def slackText = "ℹ️ *Build Successful (Deploy Skipped)*\nImage: `${slackImage}`\nCommit: `${commitMessage}`\nTime: `${slackTimestamp} UTC`"
+                    container(name: 'kaniko', shell: '/busybox/sh') {
+                        sh "curl -s -X POST -H 'Content-type: application/json' --data '{"text": "${slackText}"}' \${SLACK_WEBHOOK} || true"
+                    }
+                }
+
                 // stage ("Update dashboard") {
                 //         environmentDashboard {
                 //             environmentName(scmVars.BRANCH)  
