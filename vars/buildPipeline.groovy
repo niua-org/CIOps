@@ -340,8 +340,6 @@ spec:
                     }
                 }
 
-                    }
-                }
 
                 // stage ("Update dashboard") {
                 //         environmentDashboard {
