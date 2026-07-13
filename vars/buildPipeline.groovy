@@ -256,30 +256,90 @@ spec:
 
                 } catch (Exception slackErr) {
                     slackImage = slackImage ?: 'N/A'
-                    def slackText = ''
+                    def slackColor = ''
+                    def slackBlocks = []
                     if (slackStage == 'Build with Kaniko') {
-                        slackText = "❌ *Build Failed*\nStage: `${slackStage}`\nImage: `N/A`\nCommit: `${commitMessage}`\nError: `${slackErr.message.take(300)}`\nTime: `${slackTimestamp} UTC`"
+                        slackColor = 'danger'
+                        slackBlocks = [
+                            [type: 'header', text: [type: 'plain_text', text: "❌ Build Failed"]],
+                            [type: 'section', fields: [
+                                [type: 'mrkdwn', text: "*Stage:*\n${slackStage}"],
+                                [type: 'mrkdwn', text: "*Commit:*\n${commitMessage}"]
+                            ]],
+                            [type: 'section', text: [type: 'mrkdwn', text: "*Error:*\n${slackErr.message.take(300)}"]],
+                            [type: 'context', elements: [
+                                [type: 'mrkdwn', text: "🕐 ${slackTimestamp} UTC"]
+                            ]]
+                        ]
                     } else if (slackStatus == 'BUILD_PASSED' && slackStage == 'Deploy') {
-                        slackText = "⚠️ *Build Passed, Deploy Failed*\nStage: `${slackStage}`\nImage: `${slackImage}`\nCommit: `${commitMessage}`\nError: `${slackErr.message.take(300)}`\nTime: `${slackTimestamp} UTC`"
+                        slackColor = 'warning'
+                        slackBlocks = [
+                            [type: 'header', text: [type: 'plain_text', text: "⚠️ Build Passed, Deploy Failed"]],
+                            [type: 'section', fields: [
+                                [type: 'mrkdwn', text: "*Stage:*\n${slackStage}"],
+                                [type: 'mrkdwn', text: "*Image:*\n`${slackImage}`"]
+                            ]],
+                            [type: 'section', fields: [
+                                [type: 'mrkdwn', text: "*Commit:*\n${commitMessage}"],
+                                [type: 'mrkdwn', text: "*Error:*\n${slackErr.message.take(300)}"]
+                            ]],
+                            [type: 'context', elements: [
+                                [type: 'mrkdwn', text: "🕐 ${slackTimestamp} UTC"]
+                            ]]
+                        ]
                     } else if (slackStatus == 'DEPLOY_SKIPPED') {
-                        slackText = "✅ *Build Successful (Deploy Skipped)*\nImage: `${slackImage}`\nCommit: `${commitMessage}`\nTime: `${slackTimestamp} UTC`"
+                        slackColor = 'good'
+                        slackBlocks = [
+                            [type: 'header', text: [type: 'plain_text', text: "✅ Build Successful (Deploy Skipped)"]],
+                            [type: 'section', fields: [
+                                [type: 'mrkdwn', text: "*Image:*\n`${slackImage}`"],
+                                [type: 'mrkdwn', text: "*Commit:*\n${commitMessage}"]
+                            ]],
+                            [type: 'context', elements: [
+                                [type: 'mrkdwn', text: "🕐 ${slackTimestamp} UTC"]
+                            ]]
+                        ]
                     }
+                    def slackPayload = groovy.json.JsonOutput.toJson([attachments: [[color: slackColor, blocks: slackBlocks]]])
+                    writeFile file: 'slack-payload.json', text: slackPayload
                     container(name: 'kaniko', shell: '/busybox/sh') {
-                        sh "curl -s -X POST -H 'Content-type: application/json' --data '{"text": "${slackText}"}' \${SLACK_WEBHOOK} || true"
+                        sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK} || true"
                     }
                     throw slackErr
                 }
 
                 // Send success alert
                 if (slackStatus == 'FULL_SUCCESS') {
-                    def slackText = "✅ *Build and Deploy Successful*\nImage: `${slackImage}`\nCommit: `${commitMessage}`\nTime: `${slackTimestamp} UTC`\nJob: ${env.BUILD_URL}"
-                    container(name: 'kaniko', shell: '/busybox/sh') {
-                        sh "curl -s -X POST -H 'Content-type: application/json' --data '{"text": "${slackText}"}' \${SLACK_WEBHOOK} || true"
-                    }
+                    def slackBlocks2 = [
+                        [type: 'header', text: [type: 'plain_text', text: "✅ Build and Deploy Successful"]],
+                        [type: 'section', fields: [
+                            [type: 'mrkdwn', text: "*Image:*\n$slackImage"],
+                            [type: 'mrkdwn', text: "*Commit:*\n$commitMessage"]
+                        ]],
+                        [type: 'context', elements: [
+                            [type: 'mrkdwn', text: "<${env.BUILD_URL}|View Build>  🕐 $slackTimestamp UTC"]
+                        ]]
+                    ]
+                    def slackPayload = groovy.json.JsonOutput.toJson([attachments: [[color: 'good', blocks: slackBlocks2]]])
+                    writeFile file: 'slack-payload.json', text: slackPayload
                 } else if (slackStatus == 'DEPLOY_SKIPPED') {
-                    def slackText = "ℹ️ *Build Successful (Deploy Skipped)*\nImage: `${slackImage}`\nCommit: `${commitMessage}`\nTime: `${slackTimestamp} UTC`"
+                    def slackBlocks_skipped = [
+                        [type: 'header', text: [type: 'plain_text', text: "ℹ️ Build Successful (Deploy Skipped)"]],
+                        [type: 'section', fields: [
+                            [type: 'mrkdwn', text: "*Image:*\n`$slackImage`"],
+                            [type: 'mrkdwn', text: "*Commit:*\n$commitMessage"]
+                        ]],
+                        [type: 'context', elements: [
+                            [type: 'mrkdwn', text: "🕐 $slackTimestamp UTC"]
+                        ]]
+                    ]
+                    def slackPayload = groovy.json.JsonOutput.toJson([attachments: [[color: 'good', blocks: slackBlocks_skipped]]])
+                    writeFile file: 'slack-payload.json', text: slackPayload
                     container(name: 'kaniko', shell: '/busybox/sh') {
-                        sh "curl -s -X POST -H 'Content-type: application/json' --data '{"text": "${slackText}"}' \${SLACK_WEBHOOK} || true"
+                        sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \$SLACK_WEBHOOK || true"
+                    }
+                }
+
                     }
                 }
 
