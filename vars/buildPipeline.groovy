@@ -302,9 +302,7 @@ spec:
                     }
                     def slackPayload = groovy.json.JsonOutput.toJson([attachments: [[color: slackColor, blocks: slackBlocks]]])
                     writeFile file: 'slack-payload.json', text: slackPayload
-                    container(name: 'kaniko', shell: '/busybox/sh') {
-                        sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK} || true"
-                    }
+                    sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK} || true"
                     throw slackErr
                 }
 
@@ -322,6 +320,7 @@ spec:
                     ]
                     def slackPayload = groovy.json.JsonOutput.toJson([attachments: [[color: 'good', blocks: slackBlocks2]]])
                     writeFile file: 'slack-payload.json', text: slackPayload
+                    sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK} || true"
                 } else if (slackStatus == 'DEPLOY_SKIPPED') {
                     def slackBlocks_skipped = [
                         [type: 'header', text: [type: 'plain_text', text: "ℹ️ Build Successful (Deploy Skipped)"]],
@@ -335,11 +334,8 @@ spec:
                     ]
                     def slackPayload = groovy.json.JsonOutput.toJson([attachments: [[color: 'good', blocks: slackBlocks_skipped]]])
                     writeFile file: 'slack-payload.json', text: slackPayload
-                    container(name: 'kaniko', shell: '/busybox/sh') {
-                        sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \$SLACK_WEBHOOK || true"
+                    sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK} || true"
                     }
-                }
-
 
                 // stage ("Update dashboard") {
                 //         environmentDashboard {
