@@ -54,12 +54,6 @@ spec:
     command:
     - cat
     tty: true        
-    env:
-      - name: SLACK_WEBHOOK
-        valueFrom:
-          secretKeyRef:
-            name: jenkins-credentials
-            key: slackWebhook
   - name: jnlp
     env:
       - name: SLACK_WEBHOOK
@@ -67,6 +61,11 @@ spec:
           secretKeyRef:
             name: jenkins-credentials
             key: slackWebhook
+      - name: SLACK_WEBHOOK_FAIL
+        valueFrom:
+           secretKeyRef:
+            name: jenkins-credentials
+            key: slackWebhookFail
   volumes:
   - name: kaniko-cache
     persistentVolumeClaim:
@@ -315,7 +314,8 @@ spec:
                     }
                     def slackPayload = groovy.json.JsonOutput.toJson([attachments: [[color: slackColor, blocks: slackBlocks]]])
                     writeFile file: 'slack-payload.json', text: slackPayload
-                    sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK} || true"
+                    def failureWebhook = (slackStage == 'Build with Kaniko') ? "\${SLACK_WEBHOOK_FAIL}" : "\${SLACK_WEBHOOK}"
+                    sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json ${failureWebhook} || true"
                     throw slackErr
                 }
 
