@@ -267,6 +267,7 @@ spec:
         }
 
                 } catch (Exception slackErr) {
+                    deleteDir()
                     slackImage = slackImage ?: 'N/A'
                     def slackColor = ''
                     def slackBlocks = []
@@ -349,6 +350,9 @@ spec:
                     writeFile file: 'slack-payload.json', text: slackPayload
                     sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK} || true"
                     }
+
+                // Clean workspace so it doesn't accumulate on controller PVC
+                deleteDir()
 
                 // stage ("Update dashboard") {
                 //         environmentDashboard {
