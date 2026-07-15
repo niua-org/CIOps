@@ -314,7 +314,7 @@ spec:
                     }
                     def slackPayload = groovy.json.JsonOutput.toJson([attachments: [[color: slackColor, blocks: slackBlocks]]])
                     writeFile file: 'slack-payload.json', text: slackPayload
-                    def failureWebhook = (slackStage == 'Build with Kaniko') ? "\${SLACK_WEBHOOK_FAIL}" : "\${SLACK_WEBHOOK}"
+                    def failureWebhook = (slackStage == 'Build with Kaniko' || slackStage == 'Deploy') ? "\${SLACK_WEBHOOK_FAIL}" : "\${SLACK_WEBHOOK}"
                     sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json ${failureWebhook} || true"
                     throw slackErr
                 }
