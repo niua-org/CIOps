@@ -17,12 +17,17 @@ library 'ci-libs'
  * Parameters:
  *   category   - category folder name (e.g., "business-services", "core-services")
  *   repoUrl    - git repository URL to checkout (passed by jobBuilder)
+ *   branch     - branch to build (required, no default — will error if empty)
  *   configFile - path to build-config.yml (default: build/build-config.yml)
  *   wannaDeploy - whether to trigger deployment after build (default: false)
  */
 def call(Map pipelineParams) {
     String category = pipelineParams.category
     String repoUrl = pipelineParams.repoUrl
+    String branch = pipelineParams.branch
+    if (!branch?.trim()) {
+        error "branch parameter is required — e.g., branch: 'niua-dev-2.0'"
+    }
     String configFile = pipelineParams.configFile ?: 'build/build-config.yml'
 
     if (!category) {
@@ -107,7 +112,12 @@ spec:
             // Single checkout for all services (explicit git, no "checkout scm")
             def scmVars
             dir('repo') {
-                git url: repoUrl, credentialsId: 'git_read_token', branch: 'master'
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "*/${branch}"]],
+                    userRemoteConfigs: [[url: repoUrl, credentialsId: 'git_read_token']],
+                    extensions: []
+                ])
                 scmVars = [
                     GIT_COMMIT: sh(script: 'git rev-parse HEAD', returnStdout: true).trim(),
                     GIT_BRANCH: sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
