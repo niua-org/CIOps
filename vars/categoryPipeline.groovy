@@ -72,9 +72,11 @@ spec:
       requests:
         memory: "3Gi"
         cpu: "750m"
+        ephemeral-storage: "10Gi"
       limits:
         memory: "6Gi"
         cpu: "1500m"
+        ephemeral-storage: "20Gi"
   - name: git
     image: docker.io/egovio/builder:2-64da60a1-version_script_update-NA
     imagePullPolicy: IfNotPresent

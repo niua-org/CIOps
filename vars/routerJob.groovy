@@ -37,42 +37,95 @@ def call(Map params) {
             env.RESOLVED_AFTER = after
         }
 
-        stage('Get Changed Files (from webhook payload)') {
-            // No git diff, no checkout — changed files come straight from the
-            // GitHub webhook's own commit list. This is what used to cost 1m46s.
-            List<String> fileChanges = []
+        stage('Get Changed Files (GitHub compare API)') {
+            // Uses the GitHub compare API with BEFORE...AFTER to get only the
+            // actual diff between the two commits — no merge commit baggage.
+            String before = env.BEFORE ?: ''
+            String after = env.AFTER ?: ''
 
-            ['ADDED_FILES', 'MODIFIED_FILES', 'REMOVED_FILES'].each { varName ->
-                String raw = env[varName]
-                if (raw) {
-                    try {
-                        def parsed = new JsonSlurper().parseText(raw)
-                        // Generic Webhook Trigger may return a flat list or list-of-lists
-                        // depending on plugin version's JSONPath flattening behavior.
-                        parsed.each { entry ->
-                            if (entry instanceof List) {
-                                fileChanges.addAll(entry.collect { it.toString() })
-                            } else if (entry) {
-                                fileChanges.add(entry.toString())
+            if (!before || !after || before == after) {
+                echo "WARNING: No valid BEFORE/AFTER commit pair. Falling back to webhook payload."
+                List<String> fileChanges = []
+                ['ADDED_FILES', 'MODIFIED_FILES', 'REMOVED_FILES'].each { varName ->
+                    String raw = env[varName]
+                    if (raw) {
+                        try {
+                            def parsed = new JsonSlurper().parseText(raw)
+                            parsed.each { entry ->
+                                if (entry instanceof List) {
+                                    fileChanges.addAll(entry.collect { it.toString() })
+                                } else if (entry) {
+                                    fileChanges.add(entry.toString())
+                                }
                             }
+                        } catch (Exception e) {
+                            echo "WARNING: could not parse ${varName} as JSON: ${e.message}"
                         }
-                    } catch (Exception e) {
-                        echo "WARNING: could not parse ${varName} as JSON: ${e.message}"
                     }
                 }
+                env.CHANGED_FILES_JOINED = fileChanges.unique().join(',;,')
+                return
             }
 
-            fileChanges = fileChanges.unique()
+            withCredentials([usernamePassword(credentialsId: apiCredentialsId,
+                                               usernameVariable: 'GIT_USER',
+                                               passwordVariable: 'GIT_TOKEN')]) {
+                String repoPath = gitUrl
+                    .replaceAll(/^git@github\.com:/, '')
+                    .replaceAll(/^https:\/\/github\.com\//, '')
+                    .replaceAll(/\.git$/, '')
 
-            if (fileChanges.isEmpty()) {
-                echo "No changed files found in webhook payload. " +
-                     "Check Generic Webhook Trigger config for ADDED_FILES / MODIFIED_FILES / REMOVED_FILES JSONPath."
-            } else {
-                echo "Changed files (${fileChanges.size()}):\n${fileChanges.join('\n').take(2000)}"
+                String compareUrl = "https://api.github.com/repos/${repoPath}/compare/${before}...${after}"
+
+                sh """
+                    curl -s -o compare_response.json -H "Authorization: token \$GIT_TOKEN" \
+                        -H "Accept: application/vnd.github.v3+json" \
+                        "${compareUrl}"
+                """
+
+                def response = readJSON file: 'compare_response.json'
+                List<String> fileChanges = []
+
+                if (response.files) {
+                    response.files.each { fileEntry ->
+                        fileChanges.add(fileEntry.filename)
+                    }
+                }
+
+                fileChanges = fileChanges.unique()
+
+                if (fileChanges.isEmpty()) {
+                    echo "No changed files found via compare API. Falling back to webhook payload."
+                    ['ADDED_FILES', 'MODIFIED_FILES', 'REMOVED_FILES'].each { varName ->
+                        String raw = env[varName]
+                        if (raw) {
+                            try {
+                                def parsed = new JsonSlurper().parseText(raw)
+                                parsed.each { entry ->
+                                    if (entry instanceof List) {
+                                        fileChanges.addAll(entry.collect { it.toString() })
+                                    } else if (entry) {
+                                        fileChanges.add(entry.toString())
+                                    }
+                                }
+                            } catch (Exception e) {
+                                echo "WARNING: could not parse ${varName} as JSON: ${e.message}"
+                            }
+                        }
+                    }
+                }
+
+                fileChanges = fileChanges.unique()
+
+                if (fileChanges.isEmpty()) {
+                    echo "No changed files found in webhook payload either. " +
+                         "Check Generic Webhook Trigger config."
+                } else {
+                    echo "Changed files (${fileChanges.size()}):\n${fileChanges.join('\n').take(2000)}"
+                }
+
+                env.CHANGED_FILES_JOINED = fileChanges.join(',;,')
             }
-
-            // Comma-with-marker join, safe for typical repo file paths (no commas expected).
-            env.CHANGED_FILES_JOINED = fileChanges.join(',;,')
         }
 
         stage('Fetch build-config.yml (lightweight, no checkout)') {
