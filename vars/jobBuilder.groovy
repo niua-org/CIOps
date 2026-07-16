@@ -209,6 +209,7 @@ spec:
                     pipelineJob("categories/${cat}") {
                         logRotator(-1, 5, -1, -1)
                         parameters {
+                            stringParam('BRANCH', 'niua-dev-2.0', 'Branch to build')
                             booleanParam('WANNA_DEPLOY', true, 'Trigger deployment after successful build')
                         }
                         definition {
@@ -218,6 +219,7 @@ spec:
                                 categoryPipeline(
                                     category: '${cat}',
                                     repoUrl: '${repoUrlForCategory}',
+                                    branch: params.BRANCH,
                                     wannaDeploy: params.WANNA_DEPLOY
                                 )
                                 \"\"\")

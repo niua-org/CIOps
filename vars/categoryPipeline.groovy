@@ -23,6 +23,7 @@ library 'ci-libs'
 def call(Map pipelineParams) {
     String category = pipelineParams.category
     String repoUrl = pipelineParams.repoUrl
+    String branch = pipelineParams.branch ?: 'niua-dev-2.0'
     String configFile = pipelineParams.configFile ?: 'build/build-config.yml'
 
     if (!category) {
@@ -109,7 +110,7 @@ spec:
             dir('repo') {
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: '*/master']],
+                    branches: [[name: "*/${branch}"]],
                     userRemoteConfigs: [[url: repoUrl, credentialsId: 'git_read_token']],
                     extensions: []
                 ])
