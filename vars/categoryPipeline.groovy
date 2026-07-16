@@ -16,11 +16,13 @@ library 'ci-libs'
  *
  * Parameters:
  *   category   - category folder name (e.g., "business-services", "core-services")
+ *   repoUrl    - git repository URL to checkout (passed by jobBuilder)
  *   configFile - path to build-config.yml (default: build/build-config.yml)
  *   wannaDeploy - whether to trigger deployment after build (default: false)
  */
 def call(Map pipelineParams) {
     String category = pipelineParams.category
+    String repoUrl = pipelineParams.repoUrl
     String configFile = pipelineParams.configFile ?: 'build/build-config.yml'
 
     if (!category) {
@@ -102,8 +104,17 @@ spec:
 """
     ) {
         node(POD_LABEL) {
-            // Single checkout for all services
-            def scmVars = checkout scm
+            // Single checkout for all services (explicit git, no "checkout scm")
+            def scmVars
+            dir('repo') {
+                git url: repoUrl, credentialsId: 'git_read_token', branch: 'master'
+                scmVars = [
+                    GIT_COMMIT: sh(script: 'git rev-parse HEAD', returnStdout: true).trim(),
+                    GIT_BRANCH: sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+                ]
+            }
+            // Copy repo contents to workspace root so workDir paths resolve correctly
+            sh 'cp -a repo/* . 2>/dev/null || true'
             String REPO_NAME = env.REPO_NAME ? env.REPO_NAME : "docker.io/nudmcdg"
             def yaml = readYaml file: configFile
 
