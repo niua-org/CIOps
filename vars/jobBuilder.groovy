@@ -204,6 +204,7 @@ spec:
                 """.stripIndent())
 
                 for (String cat : categories) {
+                    String repoUrlForCategory = gitUrls.isEmpty() ? '' : gitUrls.get(0);
                     jobDslScript.append("""
                     pipelineJob("categories/${cat}") {
                         logRotator(-1, 5, -1, -1)
@@ -214,7 +215,11 @@ spec:
                             cps {
                                 script(\"\"\"
                                 library 'ci-libs'
-                                categoryPipeline(category: '${cat}', wannaDeploy: params.WANNA_DEPLOY)
+                                categoryPipeline(
+                                    category: '${cat}',
+                                    repoUrl: '${repoUrlForCategory}',
+                                    wannaDeploy: params.WANNA_DEPLOY
+                                )
                                 \"\"\")
                             }
                         }
