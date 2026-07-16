@@ -6,6 +6,19 @@ import static org.egov.jenkins.ConfigParser.getCommonBasePath
 
 library 'ci-libs'
 
+/*
+ * Builds and deploys ALL services under a given category.
+ *
+ * Reads the root build-config.yml, filters to only services matching
+ * the category prefix (e.g., "builds/upyog/business-services/"), builds
+ * each one sequentially with kaniko, collects all image names, and
+ * passes the comma-separated list to deploy-to-qa in a single call.
+ *
+ * Parameters:
+ *   category   - category folder name (e.g., "business-services", "core-services")
+ *   configFile - path to build-config.yml (default: build/build-config.yml)
+ *   wannaDeploy - whether to trigger deployment after build (default: false)
+ */
 def call(Map pipelineParams) {
     String category = pipelineParams.category
     String configFile = pipelineParams.configFile ?: 'build/build-config.yml'
@@ -32,7 +45,7 @@ spec:
         valueFrom:
           secretKeyRef:
             name: jenkins-credentials
-            key: gitReadAccessToken 
+            key: gitReadAccessToken
       - name: token
         valueFrom:
           secretKeyRef:
@@ -42,25 +55,25 @@ spec:
         valueFrom:
           secretKeyRef:
             name: jenkins-credentials
-            key: slackWebhook                                     
+            key: slackWebhook
     volumeMounts:
       - name: jenkins-docker-cfg
         mountPath: /kaniko/.docker
       - name: kaniko-cache
-        mountPath: /cache            
+        mountPath: /cache
     resources:
       requests:
         memory: "3Gi"
         cpu: "750m"
       limits:
         memory: "6Gi"
-        cpu: "1500m"      
+        cpu: "1500m"
   - name: git
     image: docker.io/egovio/builder:2-64da60a1-version_script_update-NA
     imagePullPolicy: IfNotPresent
     command:
     - cat
-    tty: true        
+    tty: true
   - name: jnlp
     env:
       - name: SLACK_WEBHOOK
@@ -77,7 +90,7 @@ spec:
   - name: kaniko-cache
     persistentVolumeClaim:
       claimName: kaniko-cache-claim
-      readOnly: true        
+      readOnly: true
   - name: jenkins-docker-cfg
     projected:
       sources:
@@ -85,10 +98,11 @@ spec:
           name: jenkins-credentials
           items:
             - key: dockerConfigJson
-              path: config.json          
+              path: config.json
 """
     ) {
         node(POD_LABEL) {
+            // Single checkout for all services
             def scmVars = checkout scm
             String REPO_NAME = env.REPO_NAME ? env.REPO_NAME : "docker.io/nudmcdg"
             def yaml = readYaml file: configFile
@@ -96,7 +110,7 @@ spec:
             // Parse ALL configs (not filtered by JOB_NAME)
             List<JobConfig> allJobConfigs = ConfigParser.populateConfigs(yaml.config, env)
 
-            // Filter to only services in this category
+            // Filter to only services in this category (e.g., builds/upyog/business-services/*)
             String prefix = "builds/upyog/${category}/"
             List<JobConfig> categoryJobs = allJobConfigs.findAll { jc ->
                 jc.getName().startsWith(prefix)
@@ -118,6 +132,7 @@ spec:
             int failedCount = 0
             List<String> failedServices = []
 
+            // Build each service one by one, collecting image names
             for (JobConfig jobConfig : categoryJobs) {
                 current++
                 String serviceName = jobConfig.getName().split('/').last()
@@ -126,7 +141,7 @@ spec:
                 try {
                     stage("Build ${serviceName}") {
 
-                        // Parse latest git commit
+                        // Get version and commit info for this service
                         stage("${serviceName}: Parse Git Commit") {
                             withEnv(["BUILD_PATH=${jobConfig.getBuildConfigs().get(0).getWorkDir()}",
                                      "PATH=alpine:$PATH"
@@ -143,7 +158,7 @@ spec:
                             }
                         }
 
-                        // Build images with kaniko
+                        // Build all images for this service (app + db) with kaniko
                         stage("${serviceName}: Build") {
                             withEnv(["PATH=/busybox:/kaniko:$PATH"]) {
                                 container(name: 'kaniko', shell: '/busybox/sh') {
@@ -189,11 +204,12 @@ spec:
                         }
                     }
                 } catch (Exception err) {
+                    // Track failure but continue building remaining services
                     failedCount++
                     failedServices.add(serviceName)
                     echo "ERROR: Build failed for ${serviceName}: ${err.message}"
 
-                    // Send failure notification
+                    // Send per-service failure notification to fail channel
                     def slackBlocks = [
                         [type: 'header', text: [type: 'plain_text', text: "❌ Category Build Failed: ${category}"]],
                         [type: 'section', fields: [
@@ -208,12 +224,10 @@ spec:
                     def slackPayload = groovy.json.JsonOutput.toJson([attachments: [[color: 'danger', blocks: slackBlocks]]])
                     writeFile file: 'slack-payload.json', text: slackPayload
                     sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK_FAIL} || true"
-
-                    // Continue to next service instead of aborting
                 }
             }
 
-            // Deploy all successfully built images
+            // Deploy all successfully built images in a single call
             boolean wannaDeploy = params.wannaDeploy ?: env.WANNA_DEPLOY?.toBoolean() ?: false
             if (wannaDeploy && !builtImages.isEmpty()) {
                 String imagesParam = builtImages.join(", ")
@@ -231,7 +245,7 @@ spec:
                         )
                     }
 
-                    // Success notification
+                    // Success notification (warning if any service failed)
                     def slackBlocks = [
                         [type: 'header', text: [type: 'plain_text', text: "✅ ${category} — Build + Deploy Complete"]],
                         [type: 'section', fields: [
@@ -250,7 +264,7 @@ spec:
                     sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK} || true"
 
                 } catch (Exception deployErr) {
-                    // Deploy failed notification
+                    // Deploy failure notification to fail channel
                     def slackBlocks = [
                         [type: 'header', text: [type: 'plain_text', text: "⚠️ ${category} — Build OK, Deploy Failed"]],
                         [type: 'section', fields: [
@@ -270,10 +284,12 @@ spec:
                 echo "No images built. Skipping deploy."
             }
 
+            // Fail the build if any service failed
             if (failedCount > 0) {
                 error "${failedCount} service(s) failed in category '${category}': ${failedServices.join(', ')}"
             }
 
+            // Clean workspace from controller PVC
             deleteDir()
         }
     }

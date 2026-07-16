@@ -212,10 +212,10 @@ spec:
                         }
                         definition {
                             cps {
-                                script("""
+                                script(\"\"\"
                                 library 'ci-libs'
                                 categoryPipeline(category: '${cat}', wannaDeploy: params.WANNA_DEPLOY)
-                                """)
+                                \"\"\")
                             }
                         }
                     }
