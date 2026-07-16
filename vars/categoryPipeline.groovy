@@ -107,7 +107,12 @@ spec:
             // Single checkout for all services (explicit git, no "checkout scm")
             def scmVars
             dir('repo') {
-                git url: repoUrl, credentialsId: 'git_read_token', branch: 'master'
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/master']],
+                    userRemoteConfigs: [[url: repoUrl, credentialsId: 'git_read_token']],
+                    extensions: []
+                ])
                 scmVars = [
                     GIT_COMMIT: sh(script: 'git rev-parse HEAD', returnStdout: true).trim(),
                     GIT_BRANCH: sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
