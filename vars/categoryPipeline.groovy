@@ -17,13 +17,17 @@ library 'ci-libs'
  * Parameters:
  *   category   - category folder name (e.g., "business-services", "core-services")
  *   repoUrl    - git repository URL to checkout (passed by jobBuilder)
+ *   branch     - branch to build (required, no default — will error if empty)
  *   configFile - path to build-config.yml (default: build/build-config.yml)
  *   wannaDeploy - whether to trigger deployment after build (default: false)
  */
 def call(Map pipelineParams) {
     String category = pipelineParams.category
     String repoUrl = pipelineParams.repoUrl
-    String branch = pipelineParams.branch ?: 'niua-dev-2.0'
+    String branch = pipelineParams.branch
+    if (!branch?.trim()) {
+        error "branch parameter is required — e.g., branch: 'niua-dev-2.0'"
+    }
     String configFile = pipelineParams.configFile ?: 'build/build-config.yml'
 
     if (!category) {
