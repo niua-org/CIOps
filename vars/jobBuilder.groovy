@@ -4,6 +4,7 @@ import org.egov.jenkins.models.JobConfig
 import org.egov.jenkins.models.BuildConfig
 
 def call(Map params) {
+    boolean createCategoryJobs = params.createCategoryJobs ?: false
 
     podTemplate(yaml: """
 kind: Pod
@@ -180,6 +181,47 @@ spec:
                 }
             }
 """);
+        }
+
+        // Generate category-wise build+deploy jobs if flag is set
+        if (createCategoryJobs && !allJobConfigs.isEmpty()) {
+            Set<String> categories = new LinkedHashSet<>()
+            String categoryPrefix = "builds/upyog/"
+            for (JobConfig jc : allJobConfigs) {
+                String name = jc.getName()
+                if (name.startsWith(categoryPrefix)) {
+                    String remaining = name.substring(categoryPrefix.length())
+                    String category = remaining.contains("/") ? remaining.substring(0, remaining.indexOf("/")) : ""
+                    if (category) {
+                        categories.add(category)
+                    }
+                }
+            }
+
+            if (!categories.isEmpty()) {
+                jobDslScript.append("""
+                    folder("categories")
+                """.stripIndent())
+
+                for (String cat : categories) {
+                    jobDslScript.append("""
+                    pipelineJob("categories/${cat}") {
+                        logRotator(-1, 5, -1, -1)
+                        parameters {
+                            booleanParam('WANNA_DEPLOY', true, 'Trigger deployment after successful build')
+                        }
+                        definition {
+                            cps {
+                                script("""
+                                library 'ci-libs'
+                                categoryPipeline(category: '${cat}', wannaDeploy: params.WANNA_DEPLOY)
+                                """)
+                            }
+                        }
+                    }
+                """)
+                }
+            }
         }
 
         stage('Building jobs') {
