@@ -122,7 +122,7 @@ spec:
                 ])
                 scmVars = [
                     GIT_COMMIT: sh(script: 'git rev-parse HEAD', returnStdout: true).trim(),
-                    GIT_BRANCH: sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+                    GIT_BRANCH: branch
                 ]
             }
             // Copy repo contents to workspace root so workDir paths resolve correctly
@@ -149,6 +149,8 @@ spec:
             List<String> builtImages = []
             String slackTimestamp = new Date().format("yyyy-MM-dd HH:mm:ss", TimeZone.getTimeZone("UTC"))
             String commitMessage = scmVars.GIT_COMMIT ? scmVars.GIT_COMMIT.take(8) : ''
+            // Keep the branch name for image tagging (scmVars BRANCH gets set per-service in the build loop)
+            def effectiveBranch = branch
 
             int total = categoryJobs.size()
             int current = 0
@@ -249,6 +251,21 @@ spec:
                     sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK_FAIL} || true"
                 }
             }
+
+            // Print build summary
+            echo "========================================"
+            echo "  BUILD SUMMARY - ${category}"
+            echo "========================================"
+            echo "  Total services: ${total}"
+            echo "  Built:         ${builtImages.size()}"
+            echo "  Failed:        ${failedCount}"
+            if (failedCount > 0) {
+                echo "  Failed list:   ${failedServices.join(', ')}"
+            }
+            echo "----------------------------------------"
+            echo "  Images built and pushed:"
+            builtImages.each { img -> echo "    - ${img}" }
+            echo "========================================"
 
             // Deploy all successfully built images in a single call
             boolean wannaDeploy = params.wannaDeploy ?: env.WANNA_DEPLOY?.toBoolean() ?: false
