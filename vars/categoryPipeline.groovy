@@ -156,7 +156,11 @@ spec:
             int current = 0
             int failedCount = 0
             List<String> failedServices = []
-
+            sh '''
+            echo "===== Before Build ====="
+            df -h
+            du -sh . || true
+            '''
             // Build each service one by one, collecting image names
             for (JobConfig jobConfig : categoryJobs) {
                 current++
@@ -214,6 +218,7 @@ spec:
                                                 --cache=true --cache-dir=/cache \
                                                 --single-snapshot=false \
                                                 --snapshotMode=redo \
+                                                --cleanup \
                                                 --destination=${image} \
                                                 --no-push=${noPushImage}
                                         """
@@ -251,6 +256,21 @@ spec:
                     sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK_FAIL} || true"
                 }
             }
+            sh '''
+            echo "===== Cleaning workspace artifacts ====="
+
+            find . -path "*/target" -type d -exec rm -rf {} + || true
+            find . -path "*/build" -type d -exec rm -rf {} + || true
+            find . -path "*/dist" -type d -exec rm -rf {} + || true
+
+            find . -name "*.jar" -delete || true
+            find . -name "*.war" -delete || true
+            find . -name "*.zip" -delete || true
+
+            echo "===== Disk Usage After Cleanup ====="
+            df -h
+            du -sh . || true
+            '''
 
             // Print build summary
             echo "========================================"
