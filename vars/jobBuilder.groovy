@@ -86,7 +86,7 @@ spec:
 
             jobDslScript.append("""
             pipelineJob("${jobConfigs.get(i).getName()}") {
-                logRotator(-1, 5, -1, -1)
+                logRotator(-1, 4, -1, -1)
                 parameters {  
                   gitParameterDefinition {
                         name('BRANCH')
