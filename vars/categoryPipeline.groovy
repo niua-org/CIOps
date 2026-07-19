@@ -126,6 +126,9 @@ def call(Map pipelineParams) {
         writeFile file: 'slack-payload.json', text: payload
         sh "curl -s -X POST -H 'Content-type: application/json' --data @slack-payload.json \${SLACK_WEBHOOK} || true"
 
+        // Clean workspace from controller PVC
+        deleteDir()
+
         if (failed > 0) {
             error "${failed} service(s) failed: ${failedServices.join(', ')}"
         }
