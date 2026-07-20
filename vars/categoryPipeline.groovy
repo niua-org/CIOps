@@ -82,13 +82,6 @@ def call(Map pipelineParams) {
                     failedServices.add(serviceName)
                     echo "  ❌ ${serviceName} - ${buildResult.result}"
                 }
-
-                // Compress build log to save PVC space (Jenkins serves .gz logs natively)
-                // Job name "builds/upyog/business-services/billing-service" → path "builds/jobs/upyog/jobs/business-services/jobs/billing-service"
-                String logRelPath = jobName.replace("/", "/jobs/")
-                String logFile = "/var/jenkins_home/jobs/${logRelPath}/builds/${buildResult.number}/log"
-                sh "gzip -f ${logFile} 2>/dev/null || true"
-
             } catch (Exception err) {
                 failed++
                 failedServices.add(serviceName)
