@@ -370,13 +370,10 @@ spec:
         }
     }
 
-    // Clean workspace@script (compiled pipeline cache - 1.3GB per job) and gzip build log
+    // Clean workspace@script (compiled pipeline cache - 1.3GB per job)
     // Runs on built-in node since the build pod is already torn down
     node('built-in') {
             def jobDir = "/var/jenkins_home/jobs/${env.JOB_NAME.replace('/', '/jobs/')}"
-            sh """
-                rm -rf ${jobDir}/workspace@script 2>/dev/null || true
-                gzip -f ${jobDir}/builds/${env.BUILD_NUMBER}/log 2>/dev/null || true
-            """
+            sh "rm -rf ${jobDir}/workspace@script 2>/dev/null || true"
         }
     }
