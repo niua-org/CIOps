@@ -208,19 +208,13 @@ spec:
                     jobDslScript.append("""
                     pipelineJob("categories/${cat}") {
                         logRotator(-1, 5, -1, -1)
-                        parameters {
-                            stringParam('BRANCH', '', 'Branch to build (required)')
-                            booleanParam('WANNA_DEPLOY', true, 'Trigger deployment after successful build')
-                        }
                         definition {
                             cps {
                                 script(\"\"\"
                                 library 'ci-libs'
                                 categoryPipeline(
                                     category: '${cat}',
-                                    repoUrl: '${repoUrlForCategory}',
-                                    branch: params.BRANCH,
-                                    wannaDeploy: params.WANNA_DEPLOY
+                                    repoUrl: '${repoUrlForCategory}'
                                 )
                                 \"\"\")
                             }

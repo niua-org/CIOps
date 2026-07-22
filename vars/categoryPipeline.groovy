@@ -10,17 +10,13 @@ library 'ci-libs'
  *
  * Parameters:
  *   category   - category folder name (e.g., "business-services", "core-services")
- *   repoUrl    - git repository URL (passed by jobBuilder)
- *   branch     - branch to build (required)
  */
 def call(Map pipelineParams) {
     String category = pipelineParams.category
-    String repoUrl = pipelineParams.repoUrl
-    String branch = pipelineParams.branch
+    String repoUrl = "https://github.com/niua-org/UPYOG-NIUA.git"
+    String branch = "niua-dev-2.0"
 
     if (!category) { error "category parameter is required" }
-    if (!branch?.trim()) { error "branch parameter is required" }
-    if (!repoUrl) { error "repoUrl parameter is required" }
 
     String slackTimestamp = new Date().format("yyyy-MM-dd HH:mm:ss", TimeZone.getTimeZone("UTC"))
 
