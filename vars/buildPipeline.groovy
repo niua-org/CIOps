@@ -7,6 +7,10 @@ import static org.egov.jenkins.ConfigParser.getCommonBasePath
 library 'ci-libs'
 
 def call(Map pipelineParams) {
+    // Allocate more memory for finance service (requires 10Gi+ for Maven build)
+    String kanikoMemoryLimit = env.JOB_NAME?.contains("egov-finance") ? "10Gi" : "6Gi"
+    String kanikoMemoryRequest = env.JOB_NAME?.contains("egov-finance") ? "6Gi" : "3Gi"
+
     podTemplate(yaml: """
 kind: Pod
 metadata:
@@ -43,10 +47,10 @@ spec:
         mountPath: /cache            
     resources:
       requests:
-        memory: "3Gi"
+        memory: "${kanikoMemoryRequest}"
         cpu: "750m"
       limits:
-        memory: "8Gi"
+        memory: "${kanikoMemoryLimit}"
         cpu: "1500m"      
   - name: git
     image: docker.io/egovio/builder:2-64da60a1-version_script_update-NA
