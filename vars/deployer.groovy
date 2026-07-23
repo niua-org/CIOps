@@ -33,7 +33,7 @@ spec:
 """
     ) {
         node(POD_LABEL) {
-          git url: pipelineParams.repo, branch: pipelineParams.branch, credentialsId: 'git_read'
+          git url: pipelineParams.repo, branch: pipelineParams.branch, credentialsId: 'git_read_token'
            
             // Adding the "Export Kubeconfig Secret" stage
             stage('Export Kubeconfig Secret') {
