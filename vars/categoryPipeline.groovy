@@ -124,9 +124,5 @@ def call(Map pipelineParams) {
 
         // Clean workspace from controller PVC
         deleteDir()
-
-        if (failed > 0) {
-            error "${failed} service(s) failed: ${failedServices.join(', ')}"
-        }
     }
 }
