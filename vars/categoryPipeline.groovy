@@ -63,7 +63,7 @@ def call(Map pipelineParams) {
                     wait: true,
                     propagate: false,
                     parameters: [
-                        string(name: 'BRANCH', value: "origin/${branch}"),
+                        string(name: 'BRANCH', value: branch),
                         booleanParam(name: 'ALT_REPO_PUSH', value: false),
                         booleanParam(name: 'WANNA_DEPLOY', value: true)
                     ]
