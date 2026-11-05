@@ -14,7 +14,7 @@ library 'ci-libs'
 def call(Map pipelineParams) {
     String category = pipelineParams.category
     String repoUrl = "https://github.com/niua-org/UPYOG-NIUA.git"
-    String branch = "niua-dev-2.0"
+    String branch = "niua-dev-3.0"
 
     if (!category) { error "category parameter is required" }
 
